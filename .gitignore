@@ -218,3 +218,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# myBridge - do NOT commit raw 99MB data
+data_raw.csv
+data/*.csv
+!data/sample_load_rating.csv
+
+# Secrets - never commit Llama API key
+.streamlit/secrets.toml
+
+# Large training files
+*.log
