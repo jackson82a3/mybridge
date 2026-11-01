@@ -1,0 +1,16 @@
+{
+  "markov_valid_auc": 0.8162204352357232,
+  "markov_auc": 0.8061690184407515,
+  "xgb_valid_auc": 0.9000454942889763,
+  "xgb_auc": 0.7939472726687145,
+  "xgb_valid_prauc": 0.33058839726588757,
+  "xgb_prauc": 0.10199506142623908,
+  "xgb_valid_recall_0.3": 0.7504990019960079,
+  "poor_recall_0.3": 0.5631768953068592,
+  "xgb_valid_recall_0.5": 0.6487025948103793,
+  "xgb_recall_0.5": 0.35379061371841153,
+  "xgb_mincond_auc": 0.8061690184407515,
+  "best_iteration": 1199,
+  "final_trees": 1200,
+  "final_rows": 140562
+}
