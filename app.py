@@ -204,9 +204,7 @@ def generate_overview(row, status_title, status_sentence):
     skip = _skip_reason()
     if skip:
         _set_status(sid, skip)
-        text = human_summary(row)
-        cache[sid] = text
-        return text
+        return human_summary(row)  # fallback is never cached; next click retries
     _set_status(sid, "CALL_STARTED")
     try:
         payload = {
@@ -241,11 +239,15 @@ def generate_overview(row, status_title, status_sentence):
         if not text:
             raise RuntimeError("empty response")
         _set_status(sid, "CALL_SUCCESS")
+        cache[sid] = text
+        return text
     except Exception as e:
         _set_status(sid, f"CALL_FAILED_{type(e).__name__}")
-        text = human_summary(row)
-    cache[sid] = text
-    return text
+        detail = getattr(e, "name", None)
+        st.session_state.setdefault("overview_detail", {})[sid] = detail or ""
+        if detail:
+            print(f"[myBridge] Llama missing module={detail}", flush=True)
+        return human_summary(row)  # fallback is never cached; next click retries
 
 
 df = load_data()
@@ -603,14 +605,18 @@ elif page == "explore":
                   on_click=send_for_check, args=(sid,))
         if st.session_state.show_summary:
             with st.container(border=True):
-                if sid not in st.session_state.setdefault("overview_cache", {}):
+                _cache = st.session_state.setdefault("overview_cache", {})
+                if sid in _cache:
+                    st.write(_cache[sid])
+                else:
                     with st.spinner("Preparing overview..."):
-                        generate_overview(row, title, outlook)
-                st.write(st.session_state.overview_cache[sid])
+                        st.write(generate_overview(row, title, outlook))
                 # TEMP diagnostics - remove after Llama is confirmed working.
                 _reason = st.session_state.get("overview_status", {}).get(
                     sid, st.session_state.get("llama_status", ""))
-                st.caption(f"Llama check: {_reason}")
+                _detail = st.session_state.get("overview_detail", {}).get(sid, "")
+                st.caption(f"Llama check: {_reason}"
+                           + (f": {_detail}" if _detail and _reason.startswith("CALL_FAILED") else ""))
                 st.caption(
                     f"key_found: {str(bool(LLAMA_API_KEY)).lower()} · "
                     f"prefix: {(LLAMA_API_KEY or '')[:4] or '-'} · "

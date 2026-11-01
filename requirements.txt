@@ -8,3 +8,4 @@ streamlit
 plotly
 folium
 streamlit-folium
+openai
