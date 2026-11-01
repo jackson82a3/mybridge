@@ -4,6 +4,7 @@
 
 import json
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -196,11 +197,33 @@ def _skip_reason():
     return None
 
 
+def _sanitize(text):
+    s = str(text)
+    if LLAMA_API_KEY:
+        s = s.replace(LLAMA_API_KEY, "***")
+    return re.sub(r"(gsk_|sk-)[A-Za-z0-9_\-]{8,}", r"\1***", s)
+
+
+def _list_llama_models():
+    if "llama_models" in st.session_state:
+        return st.session_state["llama_models"]
+    ids = []
+    try:
+        page = _llama_client().models.list()
+        ids = [m.id for m in page.data if "llama" in m.id.lower()]
+        print(f"[myBridge] Llama models={','.join(ids) if ids else '(none)'}", flush=True)
+    except Exception as e:
+        print(f"[myBridge] Llama models list failed={type(e).__name__}", flush=True)
+    st.session_state["llama_models"] = ids
+    return ids
+
+
 def generate_overview(row, status_title, status_sentence):
     cache = st.session_state.setdefault("overview_cache", {})
     sid = row["stable_id"]
     if sid in cache:
         return cache[sid]
+    _list_llama_models()
     skip = _skip_reason()
     if skip:
         _set_status(sid, skip)
@@ -244,9 +267,12 @@ def generate_overview(row, status_title, status_sentence):
     except Exception as e:
         _set_status(sid, f"CALL_FAILED_{type(e).__name__}")
         detail = getattr(e, "name", None)
-        st.session_state.setdefault("overview_detail", {})[sid] = detail or ""
         if detail:
             print(f"[myBridge] Llama missing module={detail}", flush=True)
+        code = getattr(e, "status_code", None)
+        msg = _sanitize(str(e))[:400]
+        st.session_state.setdefault("overview_diag", {})[sid] = (
+            f"status {code if code is not None else '-'} · {msg}")
         return human_summary(row)  # fallback is never cached; next click retries
 
 
@@ -614,9 +640,11 @@ elif page == "explore":
                 # TEMP diagnostics - remove after Llama is confirmed working.
                 _reason = st.session_state.get("overview_status", {}).get(
                     sid, st.session_state.get("llama_status", ""))
-                _detail = st.session_state.get("overview_detail", {}).get(sid, "")
-                st.caption(f"Llama check: {_reason}"
-                           + (f": {_detail}" if _detail and _reason.startswith("CALL_FAILED") else ""))
+                _diag = st.session_state.get("overview_diag", {}).get(sid, "")
+                st.caption(f"Llama check: {_reason}" + (f" · {_diag}" if _diag else ""))
+                _models = st.session_state.get("llama_models") or []
+                st.caption("Available Llama models: "
+                           + (", ".join(_models) if _models else "none found"))
                 st.caption(
                     f"key_found: {str(bool(LLAMA_API_KEY)).lower()} · "
                     f"prefix: {(LLAMA_API_KEY or '')[:4] or '-'} · "
