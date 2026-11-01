@@ -1,8 +1,6 @@
-# app.py - myBridge minimal dark v5 (frozen v3 model outputs)
-# Reads ONLY data/app_data.parquet and model/metrics.json (internal use only, never shown).
+# app.py - myBridge v8 (frozen v3 model outputs, human language)
+# Reads ONLY data/app_data.parquet.
 # Plain language everywhere except the engineer technical expander.
-
-import json
 
 import numpy as np
 import pandas as pd
@@ -49,12 +47,6 @@ def load_bridges():
     return pd.read_parquet("data/app_data.parquet")
 
 
-@st.cache_data
-def load_metrics():
-    with open("model/metrics.json") as f:
-        return json.load(f)
-
-
 def clean(v):
     return "" if pd.isna(v) else str(v)
 
@@ -74,25 +66,97 @@ def cond_word(v):
     return "Poor"
 
 
-def risk_band(row):
-    if row["IS_ALREADY_POOR"] == 1:
-        return "Needs major repair now"
-    p = row["P_POOR_5YR"]
-    if p > 0.7:
-        return "Very likely"
-    if p > 0.3:
-        return "Likely"
-    return "Less likely"
-
-
 def bridge_name(row):
     return f"{clean(row['facility_carried'])} over {clean(row['features_intersected'])}"
 
 
+def clean_county(name):
+    if pd.isna(name) or str(name).strip() == "":
+        return ""
+    s = " ".join(str(name).split())
+    while "County County" in s:
+        s = s.replace("County County", "County")
+    return s
+
+
+def condition_words(v):
+    if pd.isna(v):
+        return "Not rated"
+    v = float(v)
+    if v >= 7:
+        return "In good shape"
+    if v >= 5:
+        return "Showing its age, but still doing its job"
+    return "Worn and due for major work"
+
+
+def status_info(row):
+    p = row["P_POOR_5YR"]
+    if row["IS_ALREADY_POOR"] == 1:
+        return ("Needs major work now",
+                "Already in poor condition and due for major repair. "
+                "Poor does not mean unsafe to cross.")
+    if p >= 0.7:
+        return ("Plan soon",
+                f"Very likely to need major work by {int(row['year']) + 5}. "
+                f"About {round(p * 10)} in 10 bridges like this needed major work within 5 years.")
+    if p >= 0.3:
+        return ("Plan ahead",
+                "May need major work within 5 years. "
+                "Worth planning now before it becomes urgent.")
+    return ("Doing well for now",
+            "Most bridges like this stay in good or fair shape for the next 5 years.")
+
+
+def _adt_text(row):
+    if pd.isna(row["adt"]):
+        return None
+    return f"{int(round(row['adt'] / 100.0) * 100):,}"
+
+
+def human_summary(row):
+    county = clean_county(row["county_name"]) or "This"
+    age = int(round(row["age_effective"])) if pd.notna(row["age_effective"]) else None
+    adt = _adt_text(row)
+    cond = condition_words(row["min_cond"])
+    cond_l = cond[0].lower() + cond[1:]
+    action = row["action_plain"][0].lower() + row["action_plain"][1:]
+    year = int(row["PROGRAM_YEAR"])
+    s1 = (f"This {county} bridge is {cond_l} after roughly {age} years on the road."
+          if age is not None else f"This {county} bridge is {cond_l}.")
+    title, _ = status_info(row)
+    if title == "Needs major work now":
+        s2 = "It already needs major work, though it remains safe to cross"
+    elif title == "Plan soon":
+        s2 = "It is very likely to need major work in the next few years"
+    elif title == "Plan ahead":
+        s2 = "It may need major work within five years, so it is worth planning early"
+    else:
+        s2 = "It should hold up well over the next five years"
+    s2 += (f", and about {adt} vehicles use it every day."
+           if adt else ", and its daily traffic is not on record.")
+    s3 = f"The suggested next step is to {action} by {year}."
+    return f"{s1} {s2} {s3}"
+
+
+def context_line(row):
+    county = clean_county(row["county_name"])
+    if pd.isna(row["age_effective"]):
+        return county + " · Age not on record"
+    age = int(round(row["age_effective"]))
+    if pd.isna(row["adt"]):
+        return f"{county} · {age} years old"
+    return f"{county} · {age} years old · About {int(row['adt']):,} vehicles a day"
+
+
 df = load_bridges().copy()
-metrics = load_metrics()  # internal use only, never displayed
-df["risk_band"] = df.apply(risk_band, axis=1)
 df["action_plain"] = df["RECOMMENDED_ACTION"].map(ACTION_LABELS).fillna(df["RECOMMENDED_ACTION"])
+df["status_title"] = df.apply(lambda r: status_info(r)[0], axis=1)
+df["hover_text"] = df.apply(
+    lambda r: f"<b>{bridge_name(r)}</b><br>{clean_county(r['county_name'])}<br><br>"
+              f"<b>{status_info(r)[0]}</b><br>{status_info(r)[1]}",
+    axis=1,
+)
 
 if "page" not in st.session_state:
     st.session_state.page = "home"
@@ -120,6 +184,11 @@ def send_for_check(sid):
     if sid not in st.session_state.review_queue:
         st.session_state.review_queue.append(sid)
     st.session_state.page = "engineer"
+
+
+def open_bridge(sid):
+    st.session_state.selected_bridge = sid
+    st.session_state.page = "explore"
 
 
 def selected_row():
@@ -280,8 +349,9 @@ if page == "home":
         '<div class="hero"><h1>Every bridge. Know when it needs you.</h1></div>',
         unsafe_allow_html=True,
     )
-    b1, b2, b3, b4 = st.columns([1.5, 1.5, 1.5, 1.5], gap="large")
-    b2.button("Explore Bridges", type="primary", width="stretch", on_click=go_to, args=("explore",))
+    b1, b2, b3 = st.columns(3, gap="large")
+    b1.button("Explore Bridges", type="primary", width="stretch", on_click=go_to, args=("explore",))
+    b2.button("Planning & Budget", width="stretch", on_click=go_to, args=("plan",))
     b3.button("Engineer Check", width="stretch", on_click=go_to, args=("engineer",))
     g1, g2, g3 = st.columns([1, 1, 1], gap="large")
     g2.button("How to use myBridge ->", type="tertiary", width="stretch", on_click=go_to, args=("guide",))
@@ -324,21 +394,17 @@ elif page == "explore":
         with st.container(border=True):
             st.markdown(
                 '<div class="legend">'
-                '<span class="lpill"><span class="dot" style="background:#E5484D"></span>Needs major repair now</span>'
-                '<span class="lpill"><span class="dot" style="background:#E8A33D"></span>Very likely</span>'
-                '<span class="lpill"><span class="dot" style="background:#D4AF37"></span>Likely</span>'
-                '<span class="lpill"><span class="dot" style="background:#6E7681"></span>Less likely</span>'
+                '<span class="lpill"><span class="dot" style="background:#E5484D"></span>Needs major work now</span>'
+                '<span class="lpill"><span class="dot" style="background:#E8A33D"></span>Plan soon</span>'
+                '<span class="lpill"><span class="dot" style="background:#D4AF37"></span>Plan ahead</span>'
+                '<span class="lpill"><span class="dot" style="background:#6E7681"></span>Doing well for now</span>'
                 "</div>",
                 unsafe_allow_html=True,
             )
             mapdf = pd.DataFrame({
-                "Road": f["facility_carried"].fillna(""),
-                "County": f["county_name"].fillna(""),
-                "Chance in 5 years": f["P_POOR_5YR"],
-                "Condition today": f["min_cond"].map(cond_word),
                 "lat": f["lat"],
                 "long": f["long"],
-                "band": f["risk_band"],
+                "band": f["status_title"],
                 "size": f["P_POOR_5YR"] * 18 + 3,
                 "sid": f["stable_id"],
             })
@@ -348,29 +414,24 @@ elif page == "explore":
                 lon="long",
                 color="band",
                 size="size",
-                hover_name="Road",
-                hover_data={
-                    "Chance in 5 years": ":.0%",
-                    "County": True,
-                    "Condition today": True,
-                    "lat": False,
-                    "long": False,
-                    "size": False,
-                    "sid": False,
-                },
                 custom_data=["sid"],
                 color_discrete_map={
-                    "Needs major repair now": "#E5484D",
-                    "Very likely": "#E8A33D",
-                    "Likely": "#D4AF37",
-                    "Less likely": "#6E7681",
+                    "Needs major work now": "#E5484D",
+                    "Plan soon": "#E8A33D",
+                    "Plan ahead": "#D4AF37",
+                    "Doing well for now": "#6E7681",
                 },
-                category_orders={"band": ["Needs major repair now", "Very likely", "Likely", "Less likely"]},
+                category_orders={"band": ["Needs major work now", "Plan soon", "Plan ahead", "Doing well for now"]},
                 map_style="carto-darkmatter",
                 height=500,
                 opacity=0.7,
                 size_max=14,
             )
+            hover_by_sid = dict(zip(f["stable_id"], f["hover_text"]))
+            for tr in fig.data:
+                if tr.customdata is not None:
+                    tr.hovertext = [hover_by_sid.get(s, "") for s in tr.customdata[:, 0]]
+            fig.update_traces(hovertemplate="%{hovertext}<extra></extra>")
             fig.update_layout(
                 margin=dict(l=0, r=0, t=0, b=0),
                 showlegend=False,
@@ -395,46 +456,37 @@ elif page == "explore":
         st.markdown("**Highest chance first**")
         for _, tr in top10.iterrows():
             if st.button(
-                f"{bridge_name(tr)} - {clean(tr['county_name'])} - {tr['P_POOR_5YR']:.0%}",
+                f"{bridge_name(tr)} - {tr['status_title']}",
                 key=f"top_{tr['stable_id']}",
                 width="stretch",
             ):
                 st.session_state.selected_bridge = tr["stable_id"]
+            st.caption(context_line(tr))
 
         sid, row = selected_row()
-        band = row["risk_band"]
-        pill = {"Needs major repair now": "pill-now", "Very likely": "pill-very",
-                "Likely": "pill-likely"}.get(band, "pill-less")
+        title, outlook = status_info(row)
+        pill = {"Needs major work now": "pill-now", "Plan soon": "pill-very",
+                "Plan ahead": "pill-likely"}.get(title, "pill-less")
         st.markdown(
             f'<div class="mcard bridge-strong"><div class="bigname">{bridge_name(row)}</div>'
-            f'<div class="countyline">{clean(row["county_name"])}</div>'
-            f'<div style="margin:6px 0 12px"><span class="pill {pill}">{band}</span></div>'
-            f'<div class="bigpct">{row["P_POOR_5YR"]:.0%}</div>'
-            f'<div class="caption">chance of needing major repair in the next 5 years</div>'
-            f'<div class="specgrid">'
-            f'<div><div class="speclabel">Condition today</div><div class="specval">{cond_word(row["min_cond"])}</div></div>'
-            f'<div><div class="speclabel">Age</div><div class="specval">{num(row["age_effective"])} yrs</div></div>'
-            f'<div><div class="speclabel">Vehicles per day</div><div class="specval">{num(row["adt"])}</div></div>'
-            f'<div><div class="speclabel">Recommended next step</div><div class="specval">{clean(row["action_plain"])}</div></div>'
-            f'<div><div class="speclabel">Act by</div><div class="specval">{row["PROGRAM_YEAR"]:.0f}</div></div>'
-            f'<div><div class="speclabel">County</div><div class="specval">{clean(row["county_name"])}</div></div>'
-            f"</div>"
-            f'<div class="caption" style="margin-top:12px">Poor means needs major repair, not unsafe to cross.</div>'
+            f'<div class="countyline">{context_line(row)}</div>'
+            f'<div style="margin:6px 0 12px"><span class="pill {pill}">{title}</span></div>'
             f"</div>",
             unsafe_allow_html=True,
         )
         c1, c2 = st.columns(2, gap="large")
-        if c1.button("Summary", type="primary", width="stretch"):
+        if c1.button("Overview", type="primary", width="stretch"):
             st.session_state.show_summary = not st.session_state.show_summary
         c2.button("Send for Engineer Check ->", type="tertiary", width="stretch",
                   on_click=send_for_check, args=(sid,))
         if st.session_state.show_summary:
             with st.container(border=True):
-                st.write(
-                    f"{bridge_name(row)} has a {row['P_POOR_5YR']:.0%} chance of needing "
-                    f"major repair in the next 5 years. Its condition today is "
-                    f"{cond_word(row['min_cond'])} and it carries {num(row['adt'])} vehicles a day. "
-                    f"Suggested next step: {clean(row['action_plain'])} - act by {row['PROGRAM_YEAR']:.0f}."
+                st.write(human_summary(row))
+                st.write(outlook)
+                st.write(f"**Next step:** {clean(row['action_plain'])} · Act by {int(row['PROGRAM_YEAR'])}")
+                st.markdown(
+                    '<div class="caption">Poor means needs major repair, not unsafe to cross.</div>',
+                    unsafe_allow_html=True,
                 )
         with st.expander("Technical details"):
             pairs = [("stable_id", sid)]
@@ -446,6 +498,35 @@ elif page == "explore":
                     pairs.append((col, "" if pd.isna(v) else str(v)))
             st.dataframe(pd.DataFrame(pairs, columns=["Field", "Value"]),
                          hide_index=True, width="stretch")
+
+# ================= PLANNING & BUDGET =================
+elif page == "plan":
+    st.button("< Home", type="tertiary", on_click=go_to, args=("home",))
+    st.button("< Explore Bridges", type="tertiary", on_click=go_to, args=("explore",))
+    st.markdown("## Planning & Budget")
+    with st.container(border=True):
+        budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM", key="plan_budget")
+        cand = df[(df["IS_ALREADY_POOR"] == 1) | (df["P_POOR_5YR"] > 0.3)].copy()
+        med_area = cand["deck_area_sqft"].median()
+        rates = {"Replacement - Engineer Review": 700, "Rehabilitation - Engineer Review": 350}
+        cand["est_cost"] = cand["deck_area_sqft"].fillna(med_area) * cand["RECOMMENDED_ACTION"].map(rates).fillna(75)
+        cand = cand.sort_values("P_POOR_5YR", ascending=False)
+        funded = cand[cand["est_cost"].cumsum() <= budget * 5 * 1_000_000]
+        st.write(
+            f"With ${budget}M a year for the next 5 years, we could start with the "
+            f"{len(funded)} bridges that need it most."
+        )
+        st.write("The rest stay on watch and move up as work is finished.")
+    for _, fr in funded.head(10).iterrows():
+        st.button(
+            f"{bridge_name(fr)} - {status_info(fr)[0]} · {clean_county(fr['county_name'])}",
+            key=f"fund_{fr['stable_id']}",
+            width="stretch",
+            on_click=open_bridge,
+            args=(fr["stable_id"],),
+        )
+    st.button("See these bridges ->", type="primary", on_click=go_to, args=("explore",))
+    st.caption("Early planning estimates only. An engineer confirms each bridge before money is committed.")
 
 # ================= ENGINEER =================
 elif page == "engineer":
@@ -468,7 +549,7 @@ elif page == "engineer":
                 continue
             qr = qr.iloc[0]
             if st.button(
-                f"{bridge_name(qr)} - {clean(qr['county_name'])} - {qr['P_POOR_5YR']:.0%}"
+                f"{bridge_name(qr)} - {clean_county(qr['county_name'])} - {qr['P_POOR_5YR']:.0%}"
                 + ("  [Approved]" if qsid in st.session_state.approved_list else ""),
                 key=f"q_{qsid}",
                 width="stretch",
@@ -479,8 +560,8 @@ elif page == "engineer":
     with st.container(border=True):
         st.markdown(f"**Under review: {bridge_name(rrow)}**")
         st.markdown(
-            f'<div class="caption">{clean(rrow["county_name"])} &mdash; '
-            f"{rrow['risk_band']}, {rrow['P_POOR_5YR']:.0%} chance in 5 years.</div>",
+            f'<div class="caption">{clean_county(rrow["county_name"])} &mdash; '
+            f"{rrow['status_title']}, {rrow['P_POOR_5YR']:.0%} chance in 5 years.</div>",
             unsafe_allow_html=True,
         )
         if sid in st.session_state.approved_list:
@@ -513,7 +594,7 @@ elif page == "engineer":
             adf = df[df["stable_id"].isin(st.session_state.approved_list)]
             for _, ar in adf.iterrows():
                 st.markdown(
-                    f'<div class="caption">{bridge_name(ar)} &mdash; {clean(ar["county_name"])}</div>',
+                    f'<div class="caption">{bridge_name(ar)} &mdash; {clean_county(ar["county_name"])}</div>',
                     unsafe_allow_html=True,
                 )
             dl = pd.DataFrame({
