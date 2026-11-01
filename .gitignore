@@ -220,7 +220,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # myBridge - do NOT commit raw 99MB data
-data_raw.csv
+data_NBI.csv
 data/*.csv
 !data/sample_load_rating.csv
 
