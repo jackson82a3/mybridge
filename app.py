@@ -2,6 +2,9 @@
 # Reads ONLY data/app_data.parquet.
 # Plain language everywhere except the engineer technical expander.
 
+import json
+import os
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -147,6 +150,102 @@ def human_summary(row):
            if adt else ", and its daily traffic is not on record.")
     s3 = f"The suggested next step is to {action} by {year}."
     return f"{s1} {s2} {s3}"
+
+
+# ---------------- Llama overview (optional) ----------------
+def _secret(name, default=None):
+    try:
+        v = st.secrets[name]
+    except Exception:
+        v = None
+    if v in (None, ""):
+        v = os.environ.get(name)
+    return v if v not in (None, "") else default
+
+
+LLAMA_API_KEY = _secret("LLAMA_API_KEY")
+LLAMA_BASE_URL = _secret("LLAMA_BASE_URL", "https://api.llama.com/v1")
+LLAMA_MODEL = _secret("LLAMA_MODEL", "Llama-4-Scout-17B-16E-Instruct-FP8")
+
+
+@st.cache_resource
+def _llama_client():
+    from openai import OpenAI
+
+    return OpenAI(api_key=LLAMA_API_KEY, base_url=LLAMA_BASE_URL)
+
+
+def _log_status():
+    print(f"[myBridge] Llama status={st.session_state.get('llama_status')}", flush=True)
+    print(f"[myBridge] Llama model={LLAMA_MODEL}", flush=True)
+
+
+def _set_status(sid, code):
+    st.session_state["llama_status"] = code
+    st.session_state.setdefault("overview_status", {})[sid] = code
+    _log_status()
+
+
+def _skip_reason():
+    if not LLAMA_API_KEY:
+        return "SKIPPED_MISSING_KEY"
+    if LLAMA_API_KEY.strip() == "PASTE_NEW_KEY_HERE":
+        return "SKIPPED_PLACEHOLDER_KEY"
+    if "groq" in (LLAMA_BASE_URL or "").lower() and not LLAMA_API_KEY.startswith("gsk_"):
+        return "SKIPPED_WRONG_KEY_PREFIX"
+    return None
+
+
+def generate_overview(row, status_title, status_sentence):
+    cache = st.session_state.setdefault("overview_cache", {})
+    sid = row["stable_id"]
+    if sid in cache:
+        return cache[sid]
+    skip = _skip_reason()
+    if skip:
+        _set_status(sid, skip)
+        text = human_summary(row)
+        cache[sid] = text
+        return text
+    _set_status(sid, "CALL_STARTED")
+    try:
+        payload = {
+            "road": clean(row["facility_carried"]),
+            "crosses": clean(row["features_intersected"]),
+            "county": clean_county(row["county_name"]),
+            "age_years": int(round(row["age_effective"])) if pd.notna(row["age_effective"]) else None,
+            "vehicles_per_day": int(round(row["adt"] / 100.0) * 100) if pd.notna(row["adt"]) else None,
+            "condition": condition_words(row["min_cond"]),
+            "status": status_title,
+            "chance_percent": int(round(row["P_POOR_5YR"] * 100)),
+            "next_step": clean(row["action_plain"]),
+            "act_by_year": int(row["PROGRAM_YEAR"]),
+        }
+        resp = _llama_client().chat.completions.create(
+            model=LLAMA_MODEL,
+            temperature=0.25,
+            max_tokens=220,
+            messages=[
+                {"role": "system",
+                 "content": "You are myBridge. Write a short overview for a non-engineer. "
+                            "Use ONLY the data provided. Do not invent numbers, costs, causes, "
+                            "or dates. Poor means needs major repair, not unsafe to cross."},
+                {"role": "user",
+                 "content": "Here is one bridge as JSON:\n" + json.dumps(payload)
+                            + "\n\nWrite 2-3 natural sentences about this bridge for a "
+                              "non-engineer, then 1 final sentence with the recommended "
+                              "next step and the act-by year. Plain language only."},
+            ],
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        if not text:
+            raise RuntimeError("empty response")
+        _set_status(sid, "CALL_SUCCESS")
+    except Exception as e:
+        _set_status(sid, f"CALL_FAILED_{type(e).__name__}")
+        text = human_summary(row)
+    cache[sid] = text
+    return text
 
 
 df = load_data()
@@ -504,9 +603,20 @@ elif page == "explore":
                   on_click=send_for_check, args=(sid,))
         if st.session_state.show_summary:
             with st.container(border=True):
-                st.write(human_summary(row))
-                st.write(outlook)
-                st.write(f"**Next step:** {clean(row['action_plain'])} · Act by {int(row['PROGRAM_YEAR'])}")
+                if sid not in st.session_state.setdefault("overview_cache", {}):
+                    with st.spinner("Preparing overview..."):
+                        generate_overview(row, title, outlook)
+                st.write(st.session_state.overview_cache[sid])
+                # TEMP diagnostics - remove after Llama is confirmed working.
+                _reason = st.session_state.get("overview_status", {}).get(
+                    sid, st.session_state.get("llama_status", ""))
+                st.caption(f"Llama check: {_reason}")
+                st.caption(
+                    f"key_found: {str(bool(LLAMA_API_KEY)).lower()} · "
+                    f"prefix: {(LLAMA_API_KEY or '')[:4] or '-'} · "
+                    f"key length: {len(LLAMA_API_KEY or '')} · "
+                    f"base URL: {LLAMA_BASE_URL} · model: {LLAMA_MODEL}"
+                )
                 st.markdown(
                     '<div class="caption">Poor means needs major repair, not unsafe to cross.</div>',
                     unsafe_allow_html=True,
