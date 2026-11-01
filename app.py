@@ -210,8 +210,10 @@ def _list_llama_models():
     ids = []
     try:
         page = _llama_client().models.list()
-        ids = [m.id for m in page.data if "llama" in m.id.lower()]
-        print(f"[myBridge] Llama models={','.join(ids) if ids else '(none)'}", flush=True)
+        ids = sorted(m.id for m in page.data)
+        print(f"[myBridge] models count={len(ids)}", flush=True)
+        for _mid in ids:
+            print(_mid, flush=True)
     except Exception as e:
         print(f"[myBridge] Llama models list failed={type(e).__name__}", flush=True)
     st.session_state["llama_models"] = ids
@@ -643,8 +645,12 @@ elif page == "explore":
                 _diag = st.session_state.get("overview_diag", {}).get(sid, "")
                 st.caption(f"Llama check: {_reason}" + (f" · {_diag}" if _diag else ""))
                 _models = st.session_state.get("llama_models") or []
-                st.caption("Available Llama models: "
-                           + (", ".join(_models) if _models else "none found"))
+                with st.expander("Available models (all)"):
+                    if _models:
+                        for _mid in _models:
+                            st.caption(_mid)
+                    else:
+                        st.caption("none found")
                 st.caption(
                     f"key_found: {str(bool(LLAMA_API_KEY)).lower()} · "
                     f"prefix: {(LLAMA_API_KEY or '')[:4] or '-'} · "
