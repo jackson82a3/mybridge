@@ -135,10 +135,16 @@ st.markdown(
     """
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+:root {
+  --glass: linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.03));
+  --glass-border: 1px solid rgba(255,255,255,0.09);
+  --glass-shadow: 0 20px 50px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.10);
+}
 html, body, [class*="css"], .stApp { font-family:'Inter',-apple-system,'SF Pro Display',sans-serif; }
-.stApp { background-color:#0C0F14;
-  background-image:radial-gradient(1200px 600px at 50% -10%, #1a2230 0%, #0C0F14 60%);
-  color:#F5F5F7; }
+.stApp { background-color:#080B0F; background-image:
+  radial-gradient(900px 480px at 50% 6%, rgba(212,175,55,0.13), transparent 70%),
+  radial-gradient(800px 600px at 95% 100%, rgba(90,120,160,0.08), transparent 70%);
+  background-attachment:fixed; color:#F5F5F7; }
 [data-testid="stHeader"], footer, [data-testid="stSidebar"],
 [data-testid="stSidebarCollapsedControl"], #MainMenu { display:none !important; }
 .block-container { max-width:1180px; padding-top:0 !important; padding-bottom:64px; }
@@ -147,38 +153,77 @@ html, body, [class*="css"], .stApp { font-family:'Inter',-apple-system,'SF Pro D
 .hero { text-align:center; padding:8px 0 8px; }
 .hero h1 { font-size:52px; font-weight:700; letter-spacing:-0.03em; margin:16px 0 32px;
   color:#F5F5F7; }
-.topbar { display:flex; justify-content:space-between; align-items:center; padding:18px 4px; }
+svg[role="img"] { filter:drop-shadow(0 0 18px rgba(212,175,55,0.35)); }
+.topnav { position:sticky; top:0; z-index:999; display:flex; justify-content:space-between;
+  align-items:center; padding:14px 4px; background:rgba(8,11,15,0.55);
+  backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+  border-bottom:1px solid rgba(255,255,255,0.09); }
+.topnav .brand { font-weight:700; font-size:18px; }
+.topbar { position:sticky; top:0; z-index:900; display:flex; justify-content:space-between;
+  align-items:center; padding:18px 4px; background:rgba(8,11,15,0.55);
+  backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+  border-bottom:1px solid rgba(255,255,255,0.09); }
 .topbar .brand { font-weight:700; font-size:18px; }
-.mcard { background:#171C24; border-radius:18px;
-  box-shadow:0 8px 28px rgba(0,0,0,0.35); padding:24px; margin:16px 0; }
-div[data-testid="stVerticalBlockBorderWrapper"] > div { background:#171C24 !important;
-  border:none !important; border-radius:18px !important;
-  box-shadow:0 8px 28px rgba(0,0,0,0.35) !important; padding:24px !important; }
-div[data-testid="stButton"] button[kind="primary"] { background:#D4AF37 !important;
-  color:#0C0F14 !important; border:none !important; border-radius:980px !important;
-  padding:12px 32px !important; font-weight:700 !important; }
-div[data-testid="stButton"] button[kind="primary"]:hover { background:#E3C25C !important; }
-div[data-testid="stButton"] button[kind="secondary"] { background:transparent !important;
-  color:#F5F5F7 !important; border:1px solid #4A5568 !important;
-  border-radius:980px !important; padding:12px 32px !important; font-weight:600 !important;
-  box-shadow:none !important; }
+.mcard { background:var(--glass); border:var(--glass-border); border-radius:22px;
+  box-shadow:var(--glass-shadow); backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%); padding:28px 32px; margin:16px 0; }
+.bridge-strong { background:linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.045)) !important;
+  box-shadow:0 20px 50px rgba(0,0,0,0.35), inset 0 1px 0 rgba(212,175,55,0.25) !important; }
+div[data-testid="stVerticalBlockBorderWrapper"] > div { background:var(--glass) !important;
+  border:var(--glass-border) !important; border-radius:22px !important;
+  box-shadow:var(--glass-shadow) !important; backdrop-filter:blur(20px) saturate(140%) !important;
+  -webkit-backdrop-filter:blur(20px) saturate(140%) !important; padding:24px !important; }
+[data-testid="stExpander"] { background:var(--glass); border:var(--glass-border);
+  border-radius:22px; box-shadow:var(--glass-shadow); backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%); }
+div[data-testid="stButton"] button { transition:transform .15s ease, box-shadow .15s ease, filter .15s ease, border-color .15s ease; }
+div[data-testid="stButton"] button[kind="primary"] {
+  background:linear-gradient(180deg,#E9CB6B,#C9A227) !important; color:#0C0F14 !important;
+  border:none !important; border-radius:980px !important; padding:12px 32px !important;
+  font-weight:700 !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.45), 0 10px 30px rgba(212,175,55,0.22) !important; }
+div[data-testid="stButton"] button[kind="primary"]:hover { transform:translateY(-1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.55), 0 14px 34px rgba(212,175,55,0.34) !important; }
+div[data-testid="stButton"] button[kind="secondary"] { background:rgba(255,255,255,0.07) !important;
+  backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
+  color:#fff !important; border:1px solid rgba(255,255,255,0.14) !important;
+  border-radius:980px !important; padding:12px 32px !important; font-weight:600 !important; }
+div[data-testid="stButton"] button[kind="secondary"]:hover { transform:translateY(-1px);
+  border-color:rgba(255,255,255,0.25) !important;
+  box-shadow:0 8px 24px rgba(0,0,0,0.35), 0 0 18px rgba(212,175,55,0.12) !important; }
 div[data-testid="stButton"] button[kind="tertiary"] { background:transparent !important;
   color:#D4AF37 !important; border:none !important; font-weight:600 !important;
   box-shadow:none !important; padding:8px 12px !important; }
+div[data-testid="stButton"] button[kind="tertiary"]:hover { transform:translateY(-1px); }
 div[data-testid="stButton"] button:disabled { background:#2A3140 !important;
-  color:#6B7280 !important; border:none !important; }
+  color:#6B7280 !important; border:none !important; transform:none !important; }
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input {
-  border-radius:12px !important; }
+  background:rgba(255,255,255,0.05) !important;
+  border:1px solid rgba(255,255,255,0.10) !important;
+  border-radius:14px !important; color:#F5F5F7 !important; }
+[data-testid="stTextInput"] input:focus, [data-testid="stNumberInput"] input:focus {
+  border-color:rgba(212,175,55,0.55) !important;
+  box-shadow:0 0 0 1px rgba(212,175,55,0.55) !important; outline:none !important; }
 [data-testid="stWidgetLabel"] p { font-size:13px !important; color:#9A9AA0 !important; }
+section[data-testid="stFileUploaderDropzone"] {
+  border:1px dashed rgba(255,255,255,0.25) !important;
+  background:rgba(255,255,255,0.04) !important; border-radius:18px !important; }
+[data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+  background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.09);
+  border-radius:18px; overflow:hidden; }
 .pill { display:inline-block; font-size:12px; font-weight:600; padding:5px 14px;
-  border-radius:980px; color:#fff; }
-.pill-now { background:#E5484D; } .pill-very { background:#E8A33D; color:#0C0F14; }
-.pill-likely { background:#D4AF37; color:#0C0F14; } .pill-less { background:#4A5568; }
-.pill-green { background:#1A9E54; } .pill-gray { background:#2A3140; color:#F5F5F7; }
+  border-radius:980px; }
+.pill-now { background:rgba(215,0,21,0.14); color:#FF8585; border:1px solid rgba(215,0,21,0.25); }
+.pill-very { background:rgba(232,93,4,0.14); color:#F5A524; border:1px solid rgba(232,93,4,0.25); }
+.pill-likely { background:rgba(212,175,55,0.14); color:#E3C25C; border:1px solid rgba(212,175,55,0.25); }
+.pill-less { background:rgba(255,255,255,0.08); color:#9A9AA0; border:1px solid rgba(255,255,255,0.25); }
+.pill-green { background:rgba(26,158,84,0.16); color:#4ADE80; border:1px solid rgba(26,158,84,0.30); }
+.pill-gray { background:rgba(255,255,255,0.08); color:#F5F5F7; border:1px solid rgba(255,255,255,0.12); }
 .legend { display:flex; gap:8px; margin:0 0 12px; flex-wrap:wrap; }
 .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
-.lpill { background:#242B36; font-size:12px; font-weight:600; padding:5px 14px;
-  border-radius:980px; color:#F5F5F7; }
+.lpill { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.09);
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  font-size:12px; font-weight:600; padding:5px 14px; border-radius:980px; color:#F5F5F7; }
 .bigname { font-size:28px; font-weight:700; letter-spacing:-0.02em; }
 .countyline { font-size:15px; color:#9A9AA0; margin-bottom:12px; }
 .bigpct { font-size:48px; font-weight:700; letter-spacing:-0.03em; line-height:1.1; }
@@ -191,7 +236,8 @@ div[data-testid="stButton"] button:disabled { background:#2A3140 !important;
 .steptitle { font-size:17px; font-weight:700; margin:8px 0 4px; }
 .stepline { font-size:14px; color:#9A9AA0; }
 .arrow { text-align:center; font-size:24px; color:#4A5568; padding-top:40px; }
-.flowpill { background:#171C24; border:1px solid #2A3140; border-radius:980px;
+.flowpill { background:var(--glass); border:var(--glass-border); border-radius:980px;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   padding:10px 18px; font-size:14px; font-weight:600; text-align:center; }
 .toplist button { width:100%; }
 @keyframes draw { to { stroke-dashoffset:0; } }
@@ -332,6 +378,11 @@ elif page == "explore":
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#F5F5F7"),
+                hoverlabel=dict(
+                    bgcolor="rgba(16,20,27,0.88)",
+                    bordercolor="rgba(255,255,255,0.12)",
+                    font=dict(color="white"),
+                ),
             )
             sel = st.plotly_chart(fig, key="risk_map", on_select="rerun", width="stretch",
                                   config={"displayModeBar": False})
@@ -355,7 +406,7 @@ elif page == "explore":
         pill = {"Needs major repair now": "pill-now", "Very likely": "pill-very",
                 "Likely": "pill-likely"}.get(band, "pill-less")
         st.markdown(
-            f'<div class="mcard"><div class="bigname">{bridge_name(row)}</div>'
+            f'<div class="mcard bridge-strong"><div class="bigname">{bridge_name(row)}</div>'
             f'<div class="countyline">{clean(row["county_name"])}</div>'
             f'<div style="margin:6px 0 12px"><span class="pill {pill}">{band}</span></div>'
             f'<div class="bigpct">{row["P_POOR_5YR"]:.0%}</div>'
