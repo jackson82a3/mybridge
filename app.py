@@ -1,6 +1,6 @@
-# app.py - myBridge product v3 (frozen v3 model outputs)
-# Reads ONLY data/app_data.parquet and model/metrics.json. Never data_NBI.csv.
-# Plain language everywhere except Engineer Technical Details and How myBridge Works.
+# app.py - myBridge minimal dark v5 (frozen v3 model outputs)
+# Reads ONLY data/app_data.parquet and model/metrics.json (internal use only, never shown).
+# Plain language everywhere except the engineer technical expander.
 
 import json
 
@@ -11,18 +11,12 @@ import streamlit as st
 
 st.set_page_config(page_title="myBridge", layout="wide")
 
-COST_PER_SQFT = 300  # planning assumption for program math, stated in the UI
-
 LABELS = {
     "stable_id": "Bridge ID",
-    "segment": "Bridge record",
     "facility_carried": "Road",
     "features_intersected": "Crosses",
     "county_name": "County",
     "state_name": "State",
-    "lat": "Latitude",
-    "long": "Longitude",
-    "year": "Latest check year",
     "min_cond": "Overall condition today",
     "deck_cond": "Deck condition",
     "super_cond": "Superstructure condition",
@@ -48,8 +42,6 @@ ACTION_LABELS = {
     "Rehabilitation - Engineer Review": "Plan rehabilitation",
     "Preservation": "Keep maintaining",
 }
-
-NAV_OPTIONS = ["Home", "Find a Bridge", "What to Fix First", "Engineer Check", "How myBridge Works"]
 
 
 @st.cache_data
@@ -98,284 +90,180 @@ def bridge_name(row):
 
 
 df = load_bridges().copy()
-metrics = load_metrics()
+metrics = load_metrics()  # internal use only, never displayed
 df["risk_band"] = df.apply(risk_band, axis=1)
 df["action_plain"] = df["RECOMMENDED_ACTION"].map(ACTION_LABELS).fillna(df["RECOMMENDED_ACTION"])
 
+if "page" not in st.session_state:
+    st.session_state.page = "home"
 if "selected_bridge" not in st.session_state:
     st.session_state.selected_bridge = df.sort_values("P_POOR_5YR", ascending=False).iloc[0]["stable_id"]
 if "approved_list" not in st.session_state:
     st.session_state.approved_list = []
 if "review_queue" not in st.session_state:
     st.session_state.review_queue = []
-if "shortcut" not in st.session_state:
-    st.session_state.shortcut = "all"
-if "funded_only" not in st.session_state:
-    st.session_state.funded_only = False
-if "funded_ids" not in st.session_state:
-    st.session_state.funded_ids = []
-if "show_how" not in st.session_state:
-    st.session_state.show_how = False
-if "explain" not in st.session_state:
-    st.session_state.explain = False
+if "risk_filter" not in st.session_state:
+    st.session_state.risk_filter = "all"
+if "show_summary" not in st.session_state:
+    st.session_state.show_summary = False
 
 
-def go_to(section):
-    st.session_state.nav = section
+def go_to(page):
+    st.session_state.page = page
 
 
-def set_shortcut(name, section="Find a Bridge"):
-    st.session_state.shortcut = name
-    st.session_state.funded_only = False
-    st.session_state.nav = section
+def set_filter(name):
+    st.session_state.risk_filter = name
 
 
-def clear_filters():
-    st.session_state.shortcut = "all"
-    st.session_state.funded_only = False
+def send_for_check(sid):
+    if sid not in st.session_state.review_queue:
+        st.session_state.review_queue.append(sid)
+    st.session_state.page = "engineer"
 
 
-def apply_shortcut(frame):
-    s = st.session_state.shortcut
-    if s == "now":
-        return frame[frame["IS_ALREADY_POOR"] == 1]
-    if s == "soon":
-        return frame[(frame["IS_ALREADY_POOR"] == 0) & (frame["P_POOR_5YR"] > 0.3)]
-    if s == "attention":
-        return frame[(frame["IS_ALREADY_POOR"] == 1) | (frame["P_POOR_5YR"] > 0.3)]
-    return frame
+def selected_row():
+    sid = st.session_state.selected_bridge
+    if sid not in set(df["stable_id"]):
+        sid = df.sort_values("P_POOR_5YR", ascending=False).iloc[0]["stable_id"]
+        st.session_state.selected_bridge = sid
+    return sid, df[df["stable_id"] == sid].iloc[0]
 
 
-SHORTCUT_LABELS = {
-    "all": "Showing: all bridges",
-    "now": "Showing: needs major repair now",
-    "soon": "Showing: could need major repair within 5 years",
-    "attention": "Showing: bridges needing attention first",
-}
-
-
-def shortcut_note():
-    st.markdown(
-        f'<div class="caption">{SHORTCUT_LABELS[st.session_state.shortcut]}'
-        + (" &bull; funded set only" if st.session_state.funded_only else "")
-        + "</div>",
-        unsafe_allow_html=True,
-    )
-    if st.session_state.shortcut != "all" or st.session_state.funded_only:
-        st.button("Clear filters", on_click=clear_filters)
-
-
-# ---------------- Design system ----------------
+# ---------------- Dark minimal theme ----------------
 st.markdown(
     """
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 html, body, [class*="css"], .stApp { font-family:'Inter',-apple-system,'SF Pro Display',sans-serif; }
-.stApp { background:#F5F5F7; color:#1D1D1F; }
+.stApp { background-color:#0C0F14;
+  background-image:radial-gradient(1200px 600px at 50% -10%, #1a2230 0%, #0C0F14 60%);
+  color:#F5F5F7; }
 [data-testid="stHeader"], footer, [data-testid="stSidebar"],
 [data-testid="stSidebarCollapsedControl"], #MainMenu { display:none !important; }
 .block-container { max-width:1180px; padding-top:0 !important; padding-bottom:64px; }
-.topnav { position:sticky; top:0; z-index:999; display:flex; justify-content:space-between;
-  align-items:center; padding:14px 4px; background:rgba(245,245,247,0.82);
-  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); }
-.brand { font-weight:700; font-size:20px; letter-spacing:-0.02em; }
-.badgepill { background:#E9E9EE; color:#6E6E73; font-size:12px; font-weight:600;
-  padding:6px 14px; border-radius:980px; }
-.hero { text-align:center; padding:56px 0 8px; }
-.eyebrow { font-size:12px; font-weight:700; letter-spacing:0.14em; color:#86868B; }
-.hero h1 { font-size:52px; font-weight:700; letter-spacing:-0.03em; margin:12px 0; }
-.herosub { font-size:17px; color:#6E6E73; max-width:640px; margin:0 auto; }
-.mcard { background:#fff; border-radius:18px; box-shadow:0 4px 20px rgba(0,0,0,0.04);
-  padding:28px 32px; margin:16px 0; }
-div[data-testid="stVerticalBlockBorderWrapper"] > div { background:#fff !important;
+.wordmark { text-align:center; font-weight:700; font-size:15px; letter-spacing:0.28em;
+  text-transform:uppercase; color:#D4AF37; padding-top:40px; }
+.hero { text-align:center; padding:8px 0 8px; }
+.hero h1 { font-size:52px; font-weight:700; letter-spacing:-0.03em; margin:16px 0 32px;
+  color:#F5F5F7; }
+.topbar { display:flex; justify-content:space-between; align-items:center; padding:18px 4px; }
+.topbar .brand { font-weight:700; font-size:18px; }
+.mcard { background:#171C24; border-radius:18px;
+  box-shadow:0 8px 28px rgba(0,0,0,0.35); padding:24px; margin:16px 0; }
+div[data-testid="stVerticalBlockBorderWrapper"] > div { background:#171C24 !important;
   border:none !important; border-radius:18px !important;
-  box-shadow:0 4px 20px rgba(0,0,0,0.04) !important; padding:24px 28px !important; }
-.statgrid { display:flex; text-align:center; }
-.stat { flex:1; padding:4px 8px; }
-.stat + .stat { border-left:1px solid #E9E9EE; }
-.statnum { font-size:32px; font-weight:700; letter-spacing:-0.02em; }
-.statlabel { font-size:14px; color:#86868B; margin-top:4px; }
-div[data-testid="stButton"] button[kind="primary"] { background:#1D1D1F !important;
-  color:#fff !important; border:none !important; border-radius:980px !important;
-  padding:10px 28px !important; font-weight:600 !important; }
-div[data-testid="stButton"] button[kind="primary"]:hover { background:#000 !important; }
+  box-shadow:0 8px 28px rgba(0,0,0,0.35) !important; padding:24px !important; }
+div[data-testid="stButton"] button[kind="primary"] { background:#D4AF37 !important;
+  color:#0C0F14 !important; border:none !important; border-radius:980px !important;
+  padding:12px 32px !important; font-weight:700 !important; }
+div[data-testid="stButton"] button[kind="primary"]:hover { background:#E3C25C !important; }
 div[data-testid="stButton"] button[kind="secondary"] { background:transparent !important;
-  color:#0066CC !important; border:none !important; font-weight:600 !important;
+  color:#F5F5F7 !important; border:1px solid #4A5568 !important;
+  border-radius:980px !important; padding:12px 32px !important; font-weight:600 !important;
   box-shadow:none !important; }
-div[data-testid="stButton"] button:disabled { background:#E5E5EA !important;
-  color:#86868B !important; }
-div[data-testid="stRadio"] > div { justify-content:center; gap:4px;
-  background:#E9E9EE; border-radius:980px; padding:4px 8px; width:fit-content; margin:8px auto 0; }
+div[data-testid="stButton"] button[kind="tertiary"] { background:transparent !important;
+  color:#D4AF37 !important; border:none !important; font-weight:600 !important;
+  box-shadow:none !important; padding:8px 12px !important; }
+div[data-testid="stButton"] button:disabled { background:#2A3140 !important;
+  color:#6B7280 !important; border:none !important; }
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input {
   border-radius:12px !important; }
-[data-testid="stWidgetLabel"] p { font-size:13px !important; color:#86868B !important; }
+[data-testid="stWidgetLabel"] p { font-size:13px !important; color:#9A9AA0 !important; }
 .pill { display:inline-block; font-size:12px; font-weight:600; padding:5px 14px;
   border-radius:980px; color:#fff; }
-.pill-now { background:#D70015; } .pill-very { background:#E85D04; }
-.pill-likely { background:#E9A13B; } .pill-less { background:#86868B; }
-.pill-green { background:#1A9E54; } .pill-gray { background:#E9E9EE; color:#1D1D1F; }
+.pill-now { background:#E5484D; } .pill-very { background:#E8A33D; color:#0C0F14; }
+.pill-likely { background:#D4AF37; color:#0C0F14; } .pill-less { background:#4A5568; }
+.pill-green { background:#1A9E54; } .pill-gray { background:#2A3140; color:#F5F5F7; }
 .legend { display:flex; gap:8px; margin:0 0 12px; flex-wrap:wrap; }
 .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
-.lpill { background:#F5F5F7; font-size:12px; font-weight:600; padding:5px 14px;
-  border-radius:980px; color:#1D1D1F; }
+.lpill { background:#242B36; font-size:12px; font-weight:600; padding:5px 14px;
+  border-radius:980px; color:#F5F5F7; }
 .bigname { font-size:28px; font-weight:700; letter-spacing:-0.02em; }
-.countyline { font-size:15px; color:#86868B; margin-bottom:12px; }
+.countyline { font-size:15px; color:#9A9AA0; margin-bottom:12px; }
 .bigpct { font-size:48px; font-weight:700; letter-spacing:-0.03em; line-height:1.1; }
 .specgrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:20px; }
-.speclabel { font-size:12px; color:#86868B; text-transform:uppercase; letter-spacing:0.06em; }
+.speclabel { font-size:12px; color:#9A9AA0; text-transform:uppercase; letter-spacing:0.06em; }
 .specval { font-size:17px; font-weight:600; margin-top:2px; }
-.bignum { font-size:40px; font-weight:700; letter-spacing:-0.02em; text-align:center; }
-.bignumlabel { font-size:14px; color:#86868B; text-align:center; }
-.outcome { font-size:19px; font-weight:600; text-align:center; margin:8px 0 20px; }
-.caption { font-size:13px; color:#86868B; }
-.footer { text-align:center; font-size:13px; color:#86868B; margin-top:64px; }
-.vsnum { font-size:40px; font-weight:700; letter-spacing:-0.02em; }
-.vslabel { font-size:14px; color:#86868B; }
-.queuerow { display:flex; justify-content:space-between; align-items:center;
-  padding:10px 0; border-bottom:1px solid #F0F0F2; font-size:15px; }
-.guidecard h4 { margin:0 0 6px; font-size:19px; }
-.guidecard p { margin:0; font-size:15px; color:#6E6E73; }
+.caption { font-size:13px; color:#9A9AA0; }
+.footer { text-align:center; font-size:13px; color:#9A9AA0; margin-top:64px; }
+.stepnum { font-size:40px; font-weight:800; color:#D4AF37; line-height:1; }
+.steptitle { font-size:17px; font-weight:700; margin:8px 0 4px; }
+.stepline { font-size:14px; color:#9A9AA0; }
+.arrow { text-align:center; font-size:24px; color:#4A5568; padding-top:40px; }
+.flowpill { background:#171C24; border:1px solid #2A3140; border-radius:980px;
+  padding:10px 18px; font-size:14px; font-weight:600; text-align:center; }
+.toplist button { width:100%; }
+@keyframes draw { to { stroke-dashoffset:0; } }
+@keyframes glow { 0%,100% { filter:drop-shadow(0 0 0 rgba(212,175,55,0)); }
+  50% { filter:drop-shadow(0 0 14px rgba(212,175,55,0.55)); } }
+.bridge-draw { stroke-dasharray:1400; stroke-dashoffset:1400;
+  animation:draw 2.5s ease-out forwards; }
+.bridge-glow { animation:glow 4s ease-in-out 2.5s infinite; }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    '<div class="topnav"><div class="brand">myBridge</div>'
-    '<div class="badgepill">Built on 42 years of inspections</div></div>',
-    unsafe_allow_html=True,
-)
-
-st.segmented_control("Who is this for?", ["Everyone", "Owner", "Engineer"],
-                     default="Everyone", key="audience")
-audience = st.session_state.audience
-
-st.radio("Go to", NAV_OPTIONS, horizontal=True, key="nav", label_visibility="collapsed")
-nav = st.session_state.nav
-
-total_n = len(df)
-poor_n = int((df["IS_ALREADY_POOR"] == 1).sum())
-soon_n = int(((df["IS_ALREADY_POOR"] == 0) & (df["P_POOR_5YR"] > 0.3)).sum())
-
-
-def budget_section(open_card):
-    with st.container(border=True):
-        st.markdown("**Program budget**")
-        budget = st.slider(
-            "Annual program budget", 10, 200, 50, 5, format="$%dM/yr", key=f"budget_{open_card}",
-            help="Planning estimate only. Assumes cost by deck area, highest chance funded first.",
-        )
-        cand = df[(df["P_POOR_5YR"] > 0.3) & (df["IS_ALREADY_POOR"] == 0)].sort_values(
-            "P_POOR_5YR", ascending=False
-        ).copy()
-        med_area = cand["deck_area_sqft"].median()
-        cand["est_cost"] = cand["deck_area_sqft"].fillna(med_area) * COST_PER_SQFT
-        funded_mask = cand["est_cost"].cumsum() <= budget * 1_000_000
-        funded_ids = cand.loc[funded_mask, "stable_id"].tolist()
-        funded = len(funded_ids)
-        watch = len(cand) - funded
-        st.markdown(
-            f'<div class="outcome">With ${budget}M a year, fund {funded} bridges '
-            f"and keep {watch} on the watch list.</div>",
-            unsafe_allow_html=True,
-        )
-        st.progress(min(1.0, funded / max(len(cand), 1)))
-        st.markdown(
-            f'<div class="caption">{funded} of {len(cand)} bridges that could need '
-            f"major repair are covered.</div>",
-            unsafe_allow_html=True,
-        )
-
-        def see_funded(ids=funded_ids):
-            st.session_state.funded_ids = ids
-            st.session_state.funded_only = True
-            st.session_state.shortcut = "all"
-            st.session_state.nav = "What to Fix First"
-
-        st.button("See funded bridges", type="primary", on_click=see_funded)
-    return funded_ids
-
+page = st.session_state.page
 
 # ================= HOME =================
-if nav == "Home":
+if page == "home":
+    st.markdown('<div class="wordmark">myBridge</div>', unsafe_allow_html=True)
     st.markdown(
-        f'<div class="hero"><div class="eyebrow">FHWA NATIONAL BRIDGE INVENTORY</div>'
-        f"<h1>Every bridge. Know when it needs you.</h1>"
-        f'<div class="herosub">Monitoring {total_n:,} bridges &mdash; {poor_n:,} need '
-        f"major repair now and {soon_n:,} could need it within 5 years.</div></div>",
+        """
+<svg viewBox="0 0 560 200" style="width:min(560px,100%);opacity:0.95;display:block;margin:0 auto;" role="img" aria-label="Suspension bridge">
+<g class="bridge-glow" fill="none" stroke="#D4AF37" stroke-width="3" stroke-linecap="round">
+<g class="bridge-draw">
+<path d="M20,140 L150,45 Q280,190 410,45 L540,140"/>
+<path d="M20,140 L540,140"/>
+<path d="M150,45 L150,140 M410,45 L410,140"/>
+<path d="M132,70 L168,70 M392,70 L428,70"/>
+<path d="M180,75 L180,140 M215,99 L215,140 M280,118 L280,140 M345,99 L345,140 M380,75 L380,140"/>
+</g>
+<path d="M120,168 L440,168" stroke-width="2" opacity="0.45"/>
+</g>
+<circle r="4.5" fill="#D4AF37">
+<animateMotion dur="6s" repeatCount="indefinite" path="M20,140 L540,140"/>
+</circle>
+</svg>
+""",
         unsafe_allow_html=True,
     )
-    st.button("See bridges needing attention first", type="primary", width="stretch",
-              on_click=set_shortcut, args=("attention", "What to Fix First"))
-    h2a, h2b, h2c = st.columns([1, 2, 1], gap="large")
-    if h2b.button("How myBridge works (1 minute)", width="stretch"):
-        st.session_state.show_how = not st.session_state.show_how
-    if st.session_state.show_how:
-        st.info(
-            "myBridge looks at 42 years of inspection history, scores every bridge on its "
-            "chance of needing major repair within 5 years, ranks a fundable program under "
-            "your budget, and routes each candidate to a licensed engineer for review."
-        )
-
     st.markdown(
-        f'<div class="mcard"><div class="statgrid">'
-        f'<div class="stat"><div class="statnum">{total_n:,}</div>'
-        f'<div class="statlabel">Total bridges checked</div></div>'
-        f'<div class="stat"><div class="statnum">{poor_n:,}</div>'
-        f'<div class="statlabel">Need major repair now ({100 * poor_n / total_n:.1f}%)</div></div>'
-        f'<div class="stat"><div class="statnum">{soon_n:,}</div>'
-        f'<div class="statlabel">Could need major repair within 5 years</div></div>'
-        f'<div class="stat"><div class="statnum">{len(st.session_state.review_queue):,}</div>'
-        f'<div class="statlabel">Waiting for engineer check</div></div>'
-        f"</div></div>",
+        '<div class="hero"><h1>Every bridge. Know when it needs you.</h1></div>',
         unsafe_allow_html=True,
     )
-    s1, s2, s3 = st.columns(3, gap="large")
-    s1.button("Show: all bridges", on_click=set_shortcut, args=("all", "Find a Bridge"))
-    s2.button("Show: repair now", on_click=set_shortcut, args=("now", "Find a Bridge"))
-    s3.button("Show: repair within 5 years", on_click=set_shortcut, args=("soon", "Find a Bridge"))
+    b1, b2, b3, b4 = st.columns([1.5, 1.5, 1.5, 1.5], gap="large")
+    b2.button("Explore Bridges", type="primary", width="stretch", on_click=go_to, args=("explore",))
+    b3.button("Engineer Check", width="stretch", on_click=go_to, args=("engineer",))
+    g1, g2, g3 = st.columns([1, 1, 1], gap="large")
+    g2.button("How to use myBridge ->", type="tertiary", width="stretch", on_click=go_to, args=("guide",))
 
-    st.markdown("### Start here")
-    g1, g2, g3 = st.columns(3, gap="large")
-    with g1.container(border=True):
-        st.markdown('<div class="guidecard"><h4>Find</h4><p>Search any road, town, river, or county and see every bridge on the map.</p></div>',
-                    unsafe_allow_html=True)
-        st.button("Find a bridge", on_click=go_to, args=("Find a Bridge",))
-    with g2.container(border=True):
-        st.markdown('<div class="guidecard"><h4>Understand</h4><p>Each bridge gets a plain-English chance of needing major repair.</p></div>',
-                    unsafe_allow_html=True)
-        st.button("How it works", on_click=go_to, args=("How myBridge Works",))
-    with g3.container(border=True):
-        st.markdown('<div class="guidecard"><h4>Decide</h4><p>Fund the top of the list first, then send each one to an engineer.</p></div>',
-                    unsafe_allow_html=True)
-        st.button("What to fix first", on_click=go_to, args=("What to Fix First",))
+# ================= EXPLORE =================
+elif page == "explore":
+    st.markdown(
+        '<div class="topbar"><div></div><div class="brand">myBridge</div><div></div></div>',
+        unsafe_allow_html=True,
+    )
+    st.button("< Home", type="tertiary", on_click=go_to, args=("home",))
 
-    st.markdown("### What would you like to do?")
-    t1, t2, t3 = st.columns(3, gap="large")
-    t1.button("Plan repairs & budget", type="primary", width="stretch", on_click=go_to, args=("Home",))
-    t2.button("Check a bridge", width="stretch", on_click=go_to, args=("Find a Bridge",))
-    t3.button("Review bridges for approval", width="stretch", on_click=go_to, args=("Engineer Check",))
+    q = st.text_input("Search", placeholder="Search a road, river, town, or county")
+    pf = st.session_state.risk_filter
+    p1, p2, p3 = st.columns(3, gap="medium")
+    p1.button("All", type="primary" if pf == "all" else "secondary", width="stretch",
+              on_click=set_filter, args=("all",))
+    p2.button("Repair now", type="primary" if pf == "now" else "secondary", width="stretch",
+              on_click=set_filter, args=("now",))
+    p3.button("Repair soon", type="primary" if pf == "soon" else "secondary", width="stretch",
+              on_click=set_filter, args=("soon",))
+    rf = st.session_state.risk_filter
 
-    if audience == "Owner":
-        budget_section(open_card=True)
-    else:
-        with st.expander("Program budget", expanded=False):
-            st.markdown(
-                '<div class="caption">Owner view. Switch the audience toggle above for the full picture.</div>',
-                unsafe_allow_html=True,
-            )
-
-# ================= FIND A BRIDGE =================
-elif nav == "Find a Bridge":
-    st.markdown("### Find a Bridge")
-    with st.container(border=True):
-        q = st.text_input("Search", placeholder="Search a road, town, river, or county")
-        fc1, fc2 = st.columns(2, gap="large")
-        counties = sorted(df["county_name"].dropna().unique())
-        sel_counties = fc1.multiselect("County", counties, default=counties)
-        p_min = fc2.slider("Minimum chance", 0, 100, 0, 1, format="%d%%") / 100
-    f = apply_shortcut(df)
-    f = f[f["county_name"].isin(sel_counties) & (f["P_POOR_5YR"] >= p_min)].copy()
+    f = df.copy()
+    if rf == "now":
+        f = f[f["IS_ALREADY_POOR"] == 1]
+    elif rf == "soon":
+        f = f[(f["IS_ALREADY_POOR"] == 0) & (f["P_POOR_5YR"] > 0.3)]
     if q.strip():
         ql = q.strip().lower()
         f = f[
@@ -383,18 +271,17 @@ elif nav == "Find a Bridge":
             | f["features_intersected"].fillna("").str.lower().str.contains(ql)
             | f["county_name"].fillna("").str.lower().str.contains(ql)
         ]
-    shortcut_note()
     if f.empty:
-        st.warning("No bridges match. Try widening the search or clearing filters.")
+        st.warning("No bridges match. Try widening the search.")
     else:
         f = f.reset_index(drop=True)
         with st.container(border=True):
             st.markdown(
                 '<div class="legend">'
-                '<span class="lpill"><span class="dot" style="background:#D70015"></span>Needs major repair now</span>'
-                '<span class="lpill"><span class="dot" style="background:#E85D04"></span>Very likely</span>'
-                '<span class="lpill"><span class="dot" style="background:#E9A13B"></span>Likely</span>'
-                '<span class="lpill"><span class="dot" style="background:#86868B"></span>Less likely</span>'
+                '<span class="lpill"><span class="dot" style="background:#E5484D"></span>Needs major repair now</span>'
+                '<span class="lpill"><span class="dot" style="background:#E8A33D"></span>Very likely</span>'
+                '<span class="lpill"><span class="dot" style="background:#D4AF37"></span>Likely</span>'
+                '<span class="lpill"><span class="dot" style="background:#6E7681"></span>Less likely</span>'
                 "</div>",
                 unsafe_allow_html=True,
             )
@@ -427,18 +314,25 @@ elif nav == "Find a Bridge":
                 },
                 custom_data=["sid"],
                 color_discrete_map={
-                    "Needs major repair now": "#D70015",
-                    "Very likely": "#E85D04",
-                    "Likely": "#E9A13B",
-                    "Less likely": "#86868B",
+                    "Needs major repair now": "#E5484D",
+                    "Very likely": "#E8A33D",
+                    "Likely": "#D4AF37",
+                    "Less likely": "#6E7681",
                 },
                 category_orders={"band": ["Needs major repair now", "Very likely", "Likely", "Less likely"]},
-                map_style="carto-positron",
-                height=600,
-                opacity=0.75,
+                map_style="carto-darkmatter",
+                height=500,
+                opacity=0.7,
                 size_max=14,
             )
-            fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), showlegend=False, uirevision="map")
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=0, b=0),
+                showlegend=False,
+                uirevision="map",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#F5F5F7"),
+            )
             sel = st.plotly_chart(fig, key="risk_map", on_select="rerun", width="stretch",
                                   config={"displayModeBar": False})
             if sel and sel.selection and sel.selection.get("points"):
@@ -446,17 +340,23 @@ elif nav == "Find a Bridge":
                 if cd:
                     st.session_state.selected_bridge = cd[0] if isinstance(cd, (list, tuple)) else cd
 
-        sid = st.session_state.selected_bridge
-        if sid not in set(df["stable_id"]):
-            sid = df.sort_values("P_POOR_5YR", ascending=False).iloc[0]["stable_id"]
-            st.session_state.selected_bridge = sid
-        row = df[df["stable_id"] == sid].iloc[0]
+        top10 = f.sort_values("P_POOR_5YR", ascending=False).head(10)
+        st.markdown("**Highest chance first**")
+        for _, tr in top10.iterrows():
+            if st.button(
+                f"{bridge_name(tr)} - {clean(tr['county_name'])} - {tr['P_POOR_5YR']:.0%}",
+                key=f"top_{tr['stable_id']}",
+                width="stretch",
+            ):
+                st.session_state.selected_bridge = tr["stable_id"]
+
+        sid, row = selected_row()
         band = row["risk_band"]
         pill = {"Needs major repair now": "pill-now", "Very likely": "pill-very",
                 "Likely": "pill-likely"}.get(band, "pill-less")
         st.markdown(
             f'<div class="mcard"><div class="bigname">{bridge_name(row)}</div>'
-            f'<div class="countyline">{clean(row["county_name"])} County</div>'
+            f'<div class="countyline">{clean(row["county_name"])}</div>'
             f'<div style="margin:6px 0 12px"><span class="pill {pill}">{band}</span></div>'
             f'<div class="bigpct">{row["P_POOR_5YR"]:.0%}</div>'
             f'<div class="caption">chance of needing major repair in the next 5 years</div>'
@@ -473,24 +373,19 @@ elif nav == "Find a Bridge":
             unsafe_allow_html=True,
         )
         c1, c2 = st.columns(2, gap="large")
-        if c1.button("Explain in plain English", type="primary", width="stretch"):
-            st.session_state.explain = not st.session_state.explain
-
-        if c2.button("Send for engineer check", width="stretch"):
-            if sid not in st.session_state.review_queue:
-                st.session_state.review_queue.append(sid)
-            st.success("Sent for engineer check - see Engineer Check.")
-        if st.session_state.explain:
+        if c1.button("Summary", type="primary", width="stretch"):
+            st.session_state.show_summary = not st.session_state.show_summary
+        c2.button("Send for Engineer Check ->", type="tertiary", width="stretch",
+                  on_click=send_for_check, args=(sid,))
+        if st.session_state.show_summary:
             with st.container(border=True):
-                st.markdown("**Why this bridge is flagged**")
                 st.write(
-                    f"This bridge has a {row['P_POOR_5YR']:.0%} chance of needing major repair "
-                    f"in the next 5 years. Its overall condition today is "
-                    f"**{cond_word(row['min_cond'])}**, it is {num(row['age_effective'])} years old, "
-                    f"and it carries {num(row['adt'])} vehicles a day."
+                    f"{bridge_name(row)} has a {row['P_POOR_5YR']:.0%} chance of needing "
+                    f"major repair in the next 5 years. Its condition today is "
+                    f"{cond_word(row['min_cond'])} and it carries {num(row['adt'])} vehicles a day. "
+                    f"Suggested next step: {clean(row['action_plain'])} - act by {row['PROGRAM_YEAR']:.0f}."
                 )
-                st.write(f"Suggested next step: **{clean(row['action_plain'])}** - act by {row['PROGRAM_YEAR']:.0f}.")
-        with st.expander("Engineer technical details"):
+        with st.expander("Technical details"):
             pairs = [("stable_id", sid)]
             for col in ["deck_cond", "super_cond", "sub_cond", "operating_tons",
                         "inventory_tons", "deck_area_sqft", "scour", "material",
@@ -501,55 +396,19 @@ elif nav == "Find a Bridge":
             st.dataframe(pd.DataFrame(pairs, columns=["Field", "Value"]),
                          hide_index=True, width="stretch")
 
-# ================= WHAT TO FIX FIRST =================
-elif nav == "What to Fix First":
-    st.markdown("### What to Fix First")
-    st.markdown(
-        '<div class="caption">Highest chance first. Poor means needs major repair, not unsafe to cross.</div>',
-        unsafe_allow_html=True,
-    )
-    shortcut_note()
-    prog = apply_shortcut(df)
-    if st.session_state.funded_only:
-        prog = prog[prog["stable_id"].isin(st.session_state.funded_ids)]
-        st.markdown(
-            f'<div class="caption">Funded set only ({len(prog)} bridges).</div>',
-            unsafe_allow_html=True,
-        )
-    prog = prog.sort_values("P_POOR_5YR", ascending=False).copy()
-    prog["Overall condition today"] = prog["min_cond"].map(cond_word)
-    prog["Chance in 5 years"] = (prog["P_POOR_5YR"] * 100).round(1)
-    show = pd.DataFrame({
-        LABELS["facility_carried"]: prog["facility_carried"],
-        LABELS["county_name"]: prog["county_name"],
-        "Overall condition today": prog["Overall condition today"],
-        "Chance in 5 years": prog["Chance in 5 years"],
-        LABELS["RECOMMENDED_ACTION"]: prog["action_plain"],
-        LABELS["PROGRAM_YEAR"]: prog["PROGRAM_YEAR"],
-    })
-    st.dataframe(
-        show,
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "Chance in 5 years": st.column_config.ProgressColumn(
-                "Chance in 5 years", min_value=0.0, max_value=100.0, format="%d%%"
-            ),
-        },
-    )
+# ================= ENGINEER =================
+elif page == "engineer":
+    n1, n2 = st.columns(2, gap="medium")
+    n1.button("< Home", type="tertiary", on_click=go_to, args=("home",))
+    n2.button("< Explore", type="tertiary", on_click=go_to, args=("explore",))
+    st.markdown("## Engineer Check")
+    st.markdown('<div class="caption">myBridge suggests. You confirm.</div>', unsafe_allow_html=True)
 
-# ================= ENGINEER CHECK =================
-elif nav == "Engineer Check":
-    st.markdown("### Engineer Check")
-    st.write(
-        "myBridge suggests. You verify load capacity in your normal software, "
-        "upload the result, check the numbers, then approve."
-    )
     with st.container(border=True):
         st.markdown("**Waiting for engineer check**")
         if not st.session_state.review_queue:
             st.markdown(
-                '<div class="caption">Queue is empty. Send bridges here from Find a Bridge.</div>',
+                '<div class="caption">Queue is empty. Send bridges here from Explore.</div>',
                 unsafe_allow_html=True,
             )
         for qsid in st.session_state.review_queue:
@@ -557,27 +416,23 @@ elif nav == "Engineer Check":
             if qr.empty:
                 continue
             qr = qr.iloc[0]
-            status = (
-                '<span class="pill pill-green">Approved for funding plan</span>'
-                if qsid in st.session_state.approved_list
-                else '<span class="pill pill-gray">Waiting for check</span>'
-            )
-            st.markdown(
-                f'<div class="queuerow"><span>{bridge_name(qr)} &mdash; '
-                f"{clean(qr['county_name'])} ({qr['P_POOR_5YR']:.0%})</span>"
-                f"<span>{status}</span></div>",
-                unsafe_allow_html=True,
-            )
-    rsid = st.session_state.selected_bridge
-    rrow = df[df["stable_id"] == rsid].iloc[0]
+            if st.button(
+                f"{bridge_name(qr)} - {clean(qr['county_name'])} - {qr['P_POOR_5YR']:.0%}"
+                + ("  [Approved]" if qsid in st.session_state.approved_list else ""),
+                key=f"q_{qsid}",
+                width="stretch",
+            ):
+                st.session_state.selected_bridge = qsid
+
+    sid, rrow = selected_row()
     with st.container(border=True):
         st.markdown(f"**Under review: {bridge_name(rrow)}**")
         st.markdown(
-            f'<div class="caption">{clean(rrow["county_name"])} County &mdash; '
+            f'<div class="caption">{clean(rrow["county_name"])} &mdash; '
             f"{rrow['risk_band']}, {rrow['P_POOR_5YR']:.0%} chance in 5 years.</div>",
             unsafe_allow_html=True,
         )
-        if rsid in st.session_state.approved_list:
+        if sid in st.session_state.approved_list:
             st.markdown('<span class="pill pill-green">Approved &#10003;</span>', unsafe_allow_html=True)
         er_name = st.text_input("Your name", key="er_name")
         er_license = st.text_input("License number", key="er_license")
@@ -596,15 +451,15 @@ elif nav == "Engineer Check":
         )
         e1, e2 = st.columns(2, gap="large")
         if e1.button("Approve", type="primary", disabled=not ready, key="er_approve"):
-            if rsid not in st.session_state.approved_list:
-                st.session_state.approved_list.append(rsid)
+            if sid not in st.session_state.approved_list:
+                st.session_state.approved_list.append(sid)
             st.success(f"{bridge_name(rrow)} approved by {er_name.strip()} (license {er_license.strip()}).")
         if e2.button("Reject", key="er_reject"):
             st.info(f"{bridge_name(rrow)} sent back - flagged for follow-up.")
     if st.session_state.approved_list:
         with st.container(border=True):
             st.markdown(f"**Approved for funding plan ({len(st.session_state.approved_list)})**")
-            adf = df[df["stable_id"].isin(st.session_state.approved_list)].copy()
+            adf = df[df["stable_id"].isin(st.session_state.approved_list)]
             for _, ar in adf.iterrows():
                 st.markdown(
                     f'<div class="caption">{bridge_name(ar)} &mdash; {clean(ar["county_name"])}</div>',
@@ -620,41 +475,40 @@ elif nav == "Engineer Check":
             st.download_button("Download approved list (CSV)", dl.to_csv(index=False).encode(),
                                "mybridge_approved.csv", "text/csv")
 
-# ================= HOW MYBRIDGE WORKS =================
-elif nav == "How myBridge Works":
-    st.markdown("### How myBridge Works")
-    with st.container(border=True):
-        st.markdown(
-            "myBridge learned from 42 years of bridge inspections. It scores every bridge "
-            "on its chance of needing major repair within 5 years, so owners can fund the "
-            "highest chances first and engineers can verify each one before anything is decided."
-        )
-    mv = metrics.get("markov_valid_auc", 0)
-    xv = metrics.get("xgb_valid_auc", 0)
-    mt = metrics.get("markov_auc", 0)
-    xt = metrics.get("xgb_auc", 0)
-    with st.container(border=True):
-        st.markdown("**Technical results**")
-        tech_table = pd.DataFrame(
-            {
-                "Metric": ["Valid AUC", "Test AUC", "Valid PR-AUC", "Test PR-AUC",
-                           "Valid Recall@0.3", "Test Recall@0.3"],
-                "myBridge (XGBoost)": [f"{xv:.3f}", f"{xt:.3f}",
-                                       f"{metrics.get('xgb_valid_prauc', 0):.3f}",
-                                       f"{metrics.get('xgb_prauc', 0):.3f}",
-                                       f"{metrics.get('xgb_valid_recall_0.3', 0):.3f}",
-                                       f"{metrics.get('poor_recall_0.3', 0):.3f}"],
-                "Markov baseline": [f"{mv:.3f}", f"{mt:.3f}", "-", "-", "-", "-"],
-            }
-        )
-        st.table(tech_table)
-        st.markdown(
-            '<div class="caption">Temporal split only: trained 2000-2015, validated 2016-2018, '
-            "tested 2019-2020. Recent years drift, so the held-out test "
-            f"(XGBoost {xt:.3f} vs Markov {mt:.3f}) trails validation "
-            f"(XGBoost {xv:.3f} vs Markov {mv:.3f}). Target: Poor within 5 years.</div>",
-            unsafe_allow_html=True,
-        )
+# ================= GUIDE =================
+elif page == "guide":
+    st.button("< Home", type="tertiary", on_click=go_to, args=("home",))
+    st.markdown("## How to use myBridge")
+    steps = [
+        ("1", "Find", "Search any road, town, river, or county."),
+        ("2", "Read Summary", "Read the chance % and the suggested next step."),
+        ("3", "Engineer Check", "An engineer verifies load capacity and approves."),
+        ("4", "Approved Plan", "Funded bridges join the approved plan."),
+    ]
+    cols = st.columns([3, 1, 3, 1, 3, 1, 3], gap="small")
+    for i, (n, title, line) in enumerate(steps):
+        with cols[i * 2].container(border=True):
+            st.markdown(
+                f'<div class="stepnum">{n}</div><div class="steptitle">{title}</div>'
+                f'<div class="stepline">{line}</div>',
+                unsafe_allow_html=True,
+            )
+        if i < 3:
+            cols[i * 2 + 1].markdown('<div class="arrow">&rarr;</div>', unsafe_allow_html=True)
+    f1, f2, f3, f4 = st.columns(4, gap="medium")
+    f1.markdown('<div class="flowpill">Past inspections</div>', unsafe_allow_html=True)
+    f2.markdown('<div class="flowpill">myBridge flags at-risk</div>', unsafe_allow_html=True)
+    f3.markdown('<div class="flowpill">Engineer confirms</div>', unsafe_allow_html=True)
+    f4.markdown('<div class="flowpill">Plan</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="mcard"><div class="caption">'
+        "1. Poor means needs major repair, not unsafe to cross.<br>"
+        "2. The chance % comes from 42 years of inspections.<br>"
+        "3. Only a licensed engineer approves a bridge for the plan."
+        "</div></div>",
+        unsafe_allow_html=True,
+    )
+    st.button("Start Exploring", type="primary", on_click=go_to, args=("explore",))
 
 st.markdown(
     '<div class="footer">myBridge &middot; Predictions from 42 years of inspections &middot; '
