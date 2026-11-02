@@ -613,6 +613,8 @@ st.markdown(
 [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color: #C7C7CC !important; }
 [data-testid="stFileUploaderDropzone"] button {
   background: rgba(255,255,255,0.08) !important; color: #FFFFFF !important; border: 1px solid rgba(255,255,255,0.14) !important; }
+[data-testid="stProgress"] > div { background: rgba(255,255,255,0.08) !important; }
+[data-testid="stProgress"] > div > div { background: linear-gradient(90deg, #F4F0E4, #E6DFCE) !important; }
 
 .st-key-ask_mybridge { max-width: 760px; margin: 30px auto 0 !important; }
 .st-key-ask_mybridge div[data-testid="stButton"] button[kind="primary"] { height: 44px !important; }
@@ -1066,7 +1068,7 @@ elif page == "plan":
             regional = st.number_input("Regional multiplier", 0.5, 2.0, 1.0, 0.05, key="plan_regional")
         assumptions = {"escalation_rate": esc / 100.0, "contingency_pct": cont / 100.0,
                        "regional_multiplier": regional}
-        sig = (budget, horizon, strategy, esc, cont, regional)
+        sig = ("v2", budget, horizon, strategy, esc, cont, regional)
         if st.session_state.get("plan_sig") != sig:
             st.session_state.plan_sig = sig
             st.session_state.plan_result = fm.build_plan(
@@ -1077,20 +1079,86 @@ elif page == "plan":
             f"With ${budget}M a year for the next {horizon} years, we could start with the "
             f"{len(funded)} bridges that need it most."
         )
-        fig = go.Figure(go.Bar(
-            x=[a["year"] for a in plan["annual_costs"]],
-            y=[a["spent"] / 1_000_000 for a in plan["annual_costs"]],
-            marker=dict(color="rgba(230,223,206,0.75)"),
-            hovertemplate="%{x}: $%{y:.1f}M<extra></extra>",
-        ))
-        fig.update_layout(
-            height=260, margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#F5F5F7"),
-            xaxis=dict(title="Year", showgrid=False),
-            yaxis=dict(title="$M spent", gridcolor="rgba(255,255,255,0.08)"),
+    if not funded:
+        st.markdown(
+            '<div class="caption">No bridges fit this budget yet. Try a higher yearly budget.</div>',
+            unsafe_allow_html=True,
         )
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    else:
+        total_hr = int(((df["IS_ALREADY_POOR"] == 1) | (df["P_POOR_5YR"] > 0.3)).sum())
+        pct = (len(funded) / total_hr * 100) if total_hr else 0.0
+        annual = plan["annual_costs"]
+        with st.container(border=True):
+            st.markdown("**Plan at a glance**")
+            s1, s2, s3 = st.columns(3)
+            s1.markdown(
+                f'<div style="font-size:30px;font-weight:700;">{len(funded):,}</div>'
+                '<div class="caption">Bridges planned</div>', unsafe_allow_html=True)
+            s2.markdown(
+                f'<div style="font-size:30px;font-weight:700;">'
+                f'{format_money(plan["total_low"])} \u2013 {format_money(plan["total_high"])}</div>'
+                '<div class="caption">Planning range \u00b7 Early planning estimate</div>',
+                unsafe_allow_html=True)
+            s3.markdown(
+                f'<div style="font-size:30px;font-weight:700;">{len(funded):,} of {total_hr:,}</div>'
+                f'<div class="caption">High-risk bridges covered \u00b7 {pct:.0f}%</div>',
+                unsafe_allow_html=True)
+            st.markdown("**Bridges starting each year**")
+            st.markdown(
+                '<div class="caption">Each bridge is scheduled as one whole project, so years vary.</div>',
+                unsafe_allow_html=True)
+            years = [a["year"] for a in annual]
+            totals = [a["count"] for a in annual]
+            hover_cd = [[f"{a['low'] / 1e6:.1f}", f"{a['high'] / 1e6:.1f}",
+                         a["count"], a["cumulative_count"]] for a in annual]
+            action_colors = {"Plan replacement": "#C96A6A",
+                             "Plan rehabilitation": "#E6DFCE",
+                             "Preventive work": "#7A8699"}
+            fig = go.Figure()
+            for act, color in action_colors.items():
+                fig.add_trace(go.Bar(
+                    x=years,
+                    y=[a["by_action"].get(act, 0) for a in annual],
+                    name=act,
+                    marker=dict(color=color),
+                    customdata=hover_cd,
+                    hovertemplate=("%{x}<br>%{customdata[2]} bridges starting<br>"
+                                   "Planning estimate $%{customdata[0]}M \u2013 $%{customdata[1]}M<br>"
+                                   "%{customdata[3]} planned by end of %{x}<extra></extra>"),
+                ))
+            fig.add_trace(go.Scatter(
+                x=years, y=totals, mode="text",
+                text=[str(t) for t in totals],
+                textposition="top center",
+                textfont=dict(color="#F5F5F7", size=13),
+                showlegend=False, hoverinfo="skip",
+            ))
+            fig.update_layout(
+                barmode="stack", height=280,
+                margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#F5F5F7"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                xaxis=dict(title="Year", showgrid=False),
+                yaxis=dict(title="Bridges", dtick=1, gridcolor="rgba(255,255,255,0.06)",
+                           range=[0, max(totals) * 1.18 if totals else 1]),
+            )
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+            st.progress(len(funded) / total_hr if total_hr else 0.0)
+            st.markdown(
+                f'<div class="caption" style="text-align:right;">{len(funded):,} funded \u00b7 '
+                f'{total_hr - len(funded):,} still waiting for a later plan</div>',
+                unsafe_allow_html=True,
+            )
+        with st.expander("Year by year"):
+            ydf = pd.DataFrame({
+                "Year": [a["year"] for a in annual],
+                "Bridges planned": [a["count"] for a in annual],
+                "Planning estimate": [
+                    f"{format_money(a['low'])} \u2013 {format_money(a['high'])}" for a in annual],
+                "Planned so far": [a["cumulative_count"] for a in annual],
+            })
+            st.dataframe(ydf, hide_index=True, width="stretch")
     by_id = {r["stable_id"]: r for _, r in df.iterrows()}
     shortlist = []
     for f in funded[:5]:

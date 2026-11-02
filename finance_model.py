@@ -218,15 +218,21 @@ def build_plan(df, annual_budget, horizon_years=5, strategy="worst_first", assum
     base_year = int(a["base_year"])
     pending = list(cand.index)
     rows = {i: cand.loc[i] for i in pending}
+    plain_action = {"Replacement": "Plan replacement",
+                    "Rehabilitation": "Plan rehabilitation",
+                    "Preservation": "Preventive work"}
     funded, annual = [], []
+    carry = 0.0
+    cumulative = 0
     for h in range(1, horizon + 1):
         year = base_year + h
-        left = budget
-        spent = 0.0
+        cash = budget + carry  # unused budget carries forward
+        y_low = y_likely = y_high = 0
+        by_action = {}
         still = []
         for i in pending:
             est = estimate_cost(rows[i], target_year=year, assumptions=a)
-            if est["likely"] <= left:
+            if est["likely"] <= cash:  # one whole project, earliest year it fits
                 funded.append({
                     "stable_id": rows[i]["stable_id"],
                     "action": est["action"],
@@ -235,13 +241,24 @@ def build_plan(df, annual_budget, horizon_years=5, strategy="worst_first", assum
                     "likely": est["likely"],
                     "high": est["high"],
                 })
-                left -= est["likely"]
-                spent += est["likely"]
+                cash -= est["likely"]
+                y_low += est["low"]
+                y_likely += est["likely"]
+                y_high += est["high"]
+                name = plain_action[est["action"]]
+                by_action[name] = by_action.get(name, 0) + 1
             else:
                 still.append(i)
         pending = still
-        annual.append({"year": year, "budget": budget, "spent": round(spent),
-                       "funded_count": sum(1 for f in funded if f["target_year"] == year)})
+        carry = cash
+        count = sum(by_action.values())
+        cumulative += count
+        annual.append({
+            "year": year, "budget": budget, "spent": round(y_likely),
+            "funded_count": count, "count": count, "by_action": by_action,
+            "low": y_low, "likely": y_likely, "high": y_high,
+            "cumulative_count": cumulative,
+        })
     return {
         "strategy": strategy,
         "annual_budget": budget,
