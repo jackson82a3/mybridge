@@ -4,6 +4,7 @@
 
 import json
 import os
+import re
 import textwrap
 
 import numpy as np
@@ -77,7 +78,7 @@ def load_data():
         county = county.str.replace("County County", "County", regex=False)
     df["county_clean"] = county
     df["disp_name"] = (df["facility_carried"].fillna("").astype(str).str.strip() + " over "
-                       + df["features_intersected"].fillna("").astype(str).str.strip().str.title())
+                       + df["features_intersected"].fillna("").astype(str).str.strip().map(_title_features))
     age_ok = df["age_effective"].notna()
     age_s = df["age_effective"].round().astype("Int64").astype(str)
     adt_ok = df["adt"].notna()
@@ -106,9 +107,20 @@ def cond_word(v):
     return "Poor"
 
 
+_ROUTE_TOKEN = re.compile(r"(?i)^(us|mn|i|sr|cr|hwy)-?\d+$|^(us|mn|sr|i|cr)$")
+
+
+def _title_features(text):
+    words = []
+    for w in str(text).split():
+        core = w.strip(".,()")
+        words.append(w.upper() if _ROUTE_TOKEN.match(core) else w.capitalize())
+    return " ".join(words)
+
+
 def bridge_name(row):
     fac = " ".join(clean(row["facility_carried"]).split())
-    feat = " ".join(clean(row["features_intersected"]).split()).title()
+    feat = _title_features(" ".join(clean(row["features_intersected"]).split()))
     return f"{fac} over {feat}"
 
 
@@ -292,6 +304,10 @@ if "hr_limit" not in st.session_state:
     st.session_state.hr_limit = 10
 if "hr_sig" not in st.session_state:
     st.session_state.hr_sig = None
+if "hr_scope" not in st.session_state:
+    st.session_state.hr_scope = "backlog"
+if "plan_funded_ids" not in st.session_state:
+    st.session_state.plan_funded_ids = []
 
 
 def go_to(page):
@@ -304,6 +320,16 @@ def set_filter(name):
 
 def set_hr_filter(name):
     st.session_state.hr_filter = name
+
+
+def set_hr_scope(name):
+    st.session_state.hr_scope = name
+
+
+def _view_program(ids):
+    st.session_state.plan_funded_ids = list(ids)
+    st.session_state.hr_scope = "funded"
+    st.session_state.page = "highrisk"
 
 
 def _hr_more():
@@ -412,6 +438,39 @@ def _run_ask():
     with st.spinner("Thinking..."):
         st.session_state.ask_answer = answer_question(
             q, df, client_factory=factory, model=LLAMA_MODEL)
+
+
+def render_bridge_list(items, mode):
+    with st.container(key="bridge_list"):
+        for idx, it in enumerate(items):
+            if idx:
+                st.markdown(
+                    '<div style="border-top:1px solid rgba(255,255,255,0.06);"></div>',
+                    unsafe_allow_html=True,
+                )
+            if mode == "open":
+                st.button(f"{it['line1']}\n{it['line2']}", key=f"open_{it['sid']}",
+                          width="stretch", on_click=open_bridge, args=(it["sid"],))
+            else:
+                st.button(f"{it['line1']} \u203a\n{it['line2']}", key=f"expand_{it['sid']}",
+                          width="stretch", on_click=_toggle_hr, args=(it["sid"],))
+                if st.session_state.expanded_bridge == it["sid"]:
+                    tr, est = it["row"], it["est"]
+                    st.markdown(f'<div class="caption">{tr["context"]}</div>',
+                                unsafe_allow_html=True)
+                    st.write(human_summary(tr))
+                    st.markdown(
+                        f"**Planning estimate:** {format_money(est['likely'])} "
+                        f"(range {format_money(est['low'])} to {format_money(est['high'])}) "
+                        f"in {est['target_year']}"
+                    )
+                    v1, v2 = st.columns(2, gap="medium")
+                    v1.button("View bridge", key=f"list_view_{it['sid']}", width="stretch",
+                              on_click=_ask_view, args=(it["sid"],))
+                    v2.button("Send to Engineer-in-the-Loop", key=f"list_send_{it['sid']}",
+                              width="stretch", on_click=send_for_check, args=(it["sid"],))
+                    with st.expander("How this estimate is built"):
+                        st.markdown(_breakdown_text(est))
 
 
 def render_nav(items):
@@ -619,15 +678,26 @@ st.markdown(
 .st-key-ask_mybridge { max-width: 760px; margin: 30px auto 0 !important; }
 .st-key-ask_mybridge div[data-testid="stButton"] button[kind="primary"] { height: 44px !important; }
 h1 a, [data-testid="StyledLinkIconContainer"] { display: none !important; }
-.st-key-prompt_chips [data-testid="stButton"] button {
-  height: auto !important; min-height: 30px !important; padding: 5px 12px !important;
-  font-size: 12.5px !important; font-weight: 400 !important; color: #A1A1AA !important;
-  background: transparent !important; border: 1px solid rgba(255,255,255,0.07) !important;
-  border-radius: 980px !important; box-shadow: none !important;
-  white-space: normal !important; line-height: 1.3 !important; }
-.st-key-prompt_chips [data-testid="stButton"] button:hover {
-  color: #FFFFFF !important; border-color: rgba(230,223,206,0.35) !important;
-  background: rgba(230,223,206,0.08) !important; }
+.st-key-suggested_inquiries [data-testid="stButton"] button {
+  background: transparent !important; border: none !important; box-shadow: none !important;
+  color: #9A9AA0 !important; font-size: 13px !important; font-weight: 400 !important;
+  padding: 3px 0 !important; height: auto !important; min-height: 0 !important;
+  text-align: left !important; justify-content: flex-start !important;
+  white-space: normal !important; line-height: 1.4 !important; }
+.st-key-suggested_inquiries [data-testid="stButton"] button:hover { color: #E6DFCE !important; }
+.st-key-suggested_inquiries [data-testid="stButton"] button p {
+  text-align: left !important; margin: 0 !important; white-space: normal !important; }
+.st-key-bridge_list [data-testid="stButton"] button {
+  width: 100% !important; height: auto !important; min-height: 0 !important;
+  background: transparent !important; border: none !important; box-shadow: none !important;
+  border-radius: 10px !important; padding: 10px 6px !important;
+  font-size: 14px !important; font-weight: 500 !important; color: #F5F5F7 !important;
+  text-align: left !important; justify-content: flex-start !important;
+  white-space: pre-line !important; }
+.st-key-bridge_list [data-testid="stButton"] button:hover {
+  background: rgba(230,223,206,0.06) !important; color: #FFFFFF !important; }
+.st-key-bridge_list [data-testid="stButton"] button p {
+  text-align: left !important; white-space: pre-line !important; line-height: 1.35 !important; margin: 0 !important; }
 .st-key-next_step [data-testid="stButton"] button {
   width: 100% !important; height: 52px !important; background: rgba(255,255,255,0.04) !important;
   border: 1px solid rgba(230,223,206,0.55) !important; border-radius: 16px !important;
@@ -798,25 +868,24 @@ if page == "home":
         a_in, a_btn = st.columns([4, 1], gap="medium")
         a_in.text_input(
             "Ask myBridge",
-            placeholder="Ask about a bridge, place, budget, or repair cost…",
+            placeholder="Ask about bridge condition, priorities, program funding, or cost estimates…",
             key="ask_mybridge_input",
             label_visibility="collapsed",
         )
         a_btn.button("Ask", type="primary", width="stretch", on_click=_ask_submit)
-        with st.container(key="prompt_chips"):
+        with st.container(key="suggested_inquiries"):
             st.markdown(
-                '<div style="font-size:12px;color:#86868B;margin:2px 0 8px;">Try asking:</div>',
+                '<div style="font-size:12px;color:#86868B;margin:10px 0 4px;">Suggested inquiries</div>',
                 unsafe_allow_html=True,
             )
-            chips = [
-                "Bridges needing work in Chisago County",
-                "Busy bridges over a river",
-                "Plan with $40M a year",
+            inquiries = [
+                "Identify bridges requiring major repair in Chisago County.",
+                "Prepare a prioritized five-year program within $40 million annually.",
+                "Provide a planning-level estimate to replace MN 243 over the St. Croix River.",
             ]
-            chip_cols = st.columns([1.5, 1.05, 0.95], gap="small")
-            for i, (col, chip) in enumerate(zip(chip_cols, chips)):
-                col.button("✦ " + chip, key=f"ask_chip_{i}", width="stretch",
-                           on_click=_ask_chip, args=(chip,))
+            for i, text in enumerate(inquiries):
+                st.button("\u203a " + text, key=f"ask_chip_{i}", width="stretch",
+                          on_click=_ask_chip, args=(text,))
     if st.session_state.ask_pending:
         st.session_state.ask_pending = False
         _run_ask()
@@ -988,9 +1057,24 @@ elif page == "explore":
 
 # ================= HIGH RISK =================
 elif page == "highrisk":
-    render_nav([("← Home", "home", "nav_home"), ("← Explore", "explore", "nav_explore")])
+    render_nav([("\u2190 Home", "home", "nav_home"), ("\u2190 Explore", "explore", "nav_explore")])
     st.markdown("## High Risk")
     st.markdown('<div class="caption">Bridges needing attention first.</div>', unsafe_allow_html=True)
+
+    funded_ids = st.session_state.get("plan_funded_ids") or []
+    scope = st.session_state.hr_scope
+    if scope == "funded" and not funded_ids:
+        scope = "backlog"
+    s1c, s2c, s3c = st.columns(3, gap="medium")
+    s1c.button("High-risk backlog", type="primary" if scope == "backlog" else "secondary",
+               width="stretch", on_click=set_hr_scope, args=("backlog",))
+    s2c.button("Funded in current plan", type="primary" if scope == "funded" else "secondary",
+               width="stretch", on_click=set_hr_scope, args=("funded",))
+    s3c.button("Still waiting", type="primary" if scope == "waiting" else "secondary",
+               width="stretch", on_click=set_hr_scope, args=("waiting",))
+    scope = st.session_state.hr_scope
+    if scope == "funded" and not funded_ids:
+        scope = "backlog"
 
     hq = st.text_input("Search", placeholder="Search a road, river, town, or county",
                        key="highrisk_search")
@@ -1004,7 +1088,19 @@ elif page == "highrisk":
                on_click=set_hr_filter, args=("soon",))
     hf = st.session_state.hr_filter
 
-    hr = df[(df["IS_ALREADY_POOR"] == 1) | (df["P_POOR_5YR"] > 0.3)]
+    hr_all = df[(df["IS_ALREADY_POOR"] == 1) | (df["P_POOR_5YR"] > 0.3)]
+    funded_map = {}
+    if st.session_state.get("plan_result"):
+        funded_map = {f["stable_id"]: f for f in st.session_state.plan_result["funded"]}
+    if scope == "funded":
+        hr = df[df["stable_id"].isin(funded_ids)].copy()
+        order = {sid: i for i, sid in enumerate(funded_ids)}
+        hr["_ord"] = hr["stable_id"].map(order)
+        hr = hr.sort_values("_ord")
+    elif scope == "waiting":
+        hr = hr_all[~hr_all["stable_id"].isin(funded_ids)]
+    else:
+        hr = hr_all
     if hf == "now":
         hr = hr[hr["IS_ALREADY_POOR"] == 1]
     elif hf == "soon":
@@ -1016,37 +1112,33 @@ elif page == "highrisk":
             | hr["features_intersected"].fillna("").str.lower().str.contains(ql)
             | hr["county_name"].fillna("").str.lower().str.contains(ql)
         ]
-    hr = hr.sort_values("P_POOR_5YR", ascending=False)
-    sig = (hq.strip().lower(), hf)
+    if scope != "funded":
+        hr = hr.sort_values("P_POOR_5YR", ascending=False)
+    sig = (hq.strip().lower(), hf, scope)
     if st.session_state.hr_sig != sig:
         st.session_state.hr_sig = sig
         st.session_state.hr_limit = 10
-    if hr.empty:
-        st.warning("No bridges match. Try widening the search.")
-    for _, tr in hr.head(st.session_state.hr_limit).iterrows():
-        hsid = tr["stable_id"]
-        st.button(tr["disp_name"], key=f"hr_{hsid}", width="stretch",
-                  on_click=_toggle_hr, args=(hsid,))
-        st.caption(_row_subline(tr))
-        if st.session_state.expanded_bridge == hsid:
-            with st.container(border=True):
-                st.markdown(f'<div class="caption">{tr["context"]}</div>', unsafe_allow_html=True)
-                st.write(human_summary(tr))
-                est = fm.estimate_cost(tr, target_year=max(int(tr["PROGRAM_YEAR"]), 2027))
-                st.markdown(
-                    f"**Planning estimate:** {format_money(est['likely'])} "
-                    f"(range {format_money(est['low'])} to {format_money(est['high'])}) "
-                    f"in {est['target_year']}"
-                )
-                v1, v2 = st.columns(2, gap="medium")
-                v1.button("View bridge", key=f"hr_view_{hsid}", width="stretch",
-                          on_click=_ask_view, args=(hsid,))
-                v2.button("Send to Engineer-in-the-Loop", key=f"hr_send_{hsid}", width="stretch",
-                          on_click=send_for_check, args=(hsid,))
-                with st.expander("How this estimate is built"):
-                    st.markdown(_breakdown_text(est))
-    if len(hr) > st.session_state.hr_limit:
-        st.button("Show more", key="hr_more", on_click=_hr_more)
+    hr = hr.drop_duplicates("stable_id")
+    with st.container(border=True):
+        if hr.empty:
+            st.markdown(
+                '<div class="caption">No bridges match. Try widening the search.</div>',
+                unsafe_allow_html=True)
+        items = []
+        for _, tr in hr.head(st.session_state.hr_limit).iterrows():
+            fe = funded_map.get(tr["stable_id"])
+            target = fe["target_year"] if fe else max(int(tr["PROGRAM_YEAR"]), 2027)
+            est = fm.estimate_cost(tr, target_year=target)
+            year_label = f"Start {est['target_year']}" if fe else f"Act by {est['target_year']}"
+            items.append({
+                "sid": tr["stable_id"], "row": tr, "est": est,
+                "line1": tr["disp_name"],
+                "line2": (f"{tr['status_title']} \u00b7 {clean_county(tr['county_name'])} \u00b7 "
+                          f"{format_money(est['likely'])} \u00b7 {year_label}"),
+            })
+        render_bridge_list(items, "expand")
+        if len(hr) > st.session_state.hr_limit:
+            st.button("Show more", key="hr_more", on_click=_hr_more)
 
 # ================= PLAN & ESTIMATE =================
 elif page == "plan":
@@ -1159,24 +1251,32 @@ elif page == "plan":
                 "Planned so far": [a["cumulative_count"] for a in annual],
             })
             st.dataframe(ydf, hide_index=True, width="stretch")
-    by_id = {r["stable_id"]: r for _, r in df.iterrows()}
-    shortlist = []
-    for f in funded[:5]:
-        fr = by_id[f["stable_id"]]
-        shortlist.append(f["stable_id"])
-        st.button(
-            fr["disp_name"],
-            key=f"fund_{f['stable_id']}",
-            width="stretch",
-            on_click=open_bridge,
-            args=(f["stable_id"],),
-        )
-        st.caption(_row_subline(fr))
-    st.button("View all funded and high-risk bridges ->", on_click=go_to, args=("highrisk",))
-    with st.container(key="next_step"):
-        st.button("Send shortlist to Engineer-in-the-Loop", width="stretch",
-                  on_click=_send_shortlist, args=(shortlist,))
-    st.caption("Early planning estimates only. An engineer confirms each bridge before money is committed.")
+    if funded:
+        by_id = {r["stable_id"]: r for _, r in df.iterrows()}
+        items = []
+        for f in funded[:5]:
+            fr = by_id[f["stable_id"]]
+            items.append({
+                "sid": f["stable_id"], "row": fr, "est": None,
+                "line1": fr["disp_name"],
+                "line2": (f"{fr['status_title']} \u00b7 {clean_county(fr['county_name'])} \u00b7 "
+                          f"{format_money(f['likely'])} \u00b7 Start {f['target_year']}"),
+            })
+        with st.container(border=True):
+            st.markdown("**Funded program**")
+            st.markdown(
+                f'<div class="caption">{len(funded):,} bridges \u00b7 '
+                f'{format_money(plan["total_low"])} \u2013 {format_money(plan["total_high"])} \u00b7 '
+                f'{annual[0]["year"]}\u2013{annual[-1]["year"]}</div>',
+                unsafe_allow_html=True,
+            )
+            render_bridge_list(items, "open")
+            with st.container(key="next_step"):
+                st.button("Send shortlist to Engineer-in-the-Loop", width="stretch",
+                          on_click=_send_shortlist, args=([it["sid"] for it in items],))
+            st.button("View complete program \u2192", type="tertiary",
+                      on_click=_view_program, args=([f["stable_id"] for f in funded],))
+            st.caption("Early planning estimates only. An engineer confirms each bridge before money is committed.")
 
 # ================= ENGINEER =================
 elif page == "engineer":
