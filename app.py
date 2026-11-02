@@ -12,6 +12,8 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
+from agent_tools import answer_question
+
 st.set_page_config(page_title="myBridge", layout="wide")
 
 LABELS = {
@@ -275,6 +277,10 @@ if "list_limit" not in st.session_state:
     st.session_state.list_limit = 10
 if "list_sig" not in st.session_state:
     st.session_state.list_sig = None
+if "ask_answer" not in st.session_state:
+    st.session_state.ask_answer = None
+if "ask_pending" not in st.session_state:
+    st.session_state.ask_pending = False
 
 
 def go_to(page):
@@ -298,6 +304,46 @@ def open_bridge(sid):
 
 def show_more():
     st.session_state.list_limit += 10
+
+
+def _ask_submit():
+    st.session_state.ask_pending = True
+
+
+def _ask_chip(text):
+    st.session_state.ask_mybridge_input = text
+    st.session_state.ask_pending = True
+
+
+def _ask_clear():
+    st.session_state.ask_answer = None
+    st.session_state.ask_pending = False
+    st.session_state.ask_mybridge_input = ""
+
+
+def _ask_view(sid):
+    st.session_state.bridge_search = ""
+    st.session_state.risk_filter = "all"
+    st.session_state.selected_bridge = sid
+    st.session_state.show_summary = False
+    st.session_state.page = "explore"
+
+
+def _ask_open_plan(budget_m, horizon, strategy):
+    st.session_state.plan_budget = int(min(100, max(10, round(budget_m / 5) * 5)))
+    st.session_state.plan_horizon = int(horizon)
+    st.session_state.plan_strategy = strategy
+    st.session_state.page = "plan"
+
+
+def _run_ask():
+    q = st.session_state.get("ask_mybridge_input", "").strip()
+    if not q:
+        return
+    factory = _llama_client if _skip_reason() is None else None
+    with st.spinner("Thinking..."):
+        st.session_state.ask_answer = answer_question(
+            q, df, client_factory=factory, model=LLAMA_MODEL)
 
 
 def render_nav(items):
@@ -501,6 +547,19 @@ st.markdown(
 [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color: #C7C7CC !important; }
 [data-testid="stFileUploaderDropzone"] button {
   background: rgba(255,255,255,0.08) !important; color: #FFFFFF !important; border: 1px solid rgba(255,255,255,0.14) !important; }
+
+.st-key-ask_mybridge { max-width: 760px; margin: 30px auto 0 !important; }
+.st-key-ask_mybridge .st-key-ask_chip_0[data-testid="stButton"] > button,
+.st-key-ask_mybridge .st-key-ask_chip_1[data-testid="stButton"] > button,
+.st-key-ask_mybridge .st-key-ask_chip_2[data-testid="stButton"] > button {
+  font-size: 12px !important; font-weight: 400 !important; padding: 8px 12px !important;
+  min-height: 0 !important; height: auto !important; line-height: 1.35 !important;
+  background: rgba(255,255,255,0.04) !important; border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 980px !important; color: #C7C7CC !important; box-shadow: none !important; }
+.st-key-ask_mybridge .st-key-ask_chip_0[data-testid="stButton"] > button:hover,
+.st-key-ask_mybridge .st-key-ask_chip_1[data-testid="stButton"] > button:hover,
+.st-key-ask_mybridge .st-key-ask_chip_2[data-testid="stButton"] > button:hover {
+  background: rgba(212,175,55,0.10) !important; border-color: rgba(212,175,55,0.35) !important; color: #FFFFFF !important; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -550,6 +609,53 @@ if page == "home":
         b1.button("Explore Bridges", width="stretch", on_click=go_to, args=("explore",))
         b2.button("Planning & Budget", width="stretch", on_click=go_to, args=("plan",))
         b3.button("Engineer Check", width="stretch", on_click=go_to, args=("engineer",))
+    with st.container(key="ask_mybridge"):
+        st.markdown(
+            '<div style="color:#D4AF37;font-size:13px;font-weight:700;'
+            'letter-spacing:0.18em;margin:6px 0 10px;">Ask myBridge</div>',
+            unsafe_allow_html=True,
+        )
+        a_in, a_btn = st.columns([4, 1], gap="medium")
+        a_in.text_input(
+            "Ask myBridge",
+            placeholder="Ask about a bridge, place, budget, or repair cost…",
+            key="ask_mybridge_input",
+            label_visibility="collapsed",
+        )
+        a_btn.button("Ask", type="primary", width="stretch", on_click=_ask_submit)
+        chips = [
+            "Bridges needing work now in Chisago County",
+            "Busy bridges over a river",
+            "What could $40M a year fix first?",
+        ]
+        chip_cols = st.columns(3, gap="small")
+        for i, (col, chip) in enumerate(zip(chip_cols, chips)):
+            col.button(chip, key=f"ask_chip_{i}", width="stretch",
+                       on_click=_ask_chip, args=(chip,))
+    if st.session_state.ask_pending:
+        st.session_state.ask_pending = False
+        _run_ask()
+    ans = st.session_state.ask_answer
+    if ans:
+        with st.container(border=True):
+            st.markdown(f"**I understood:** {ans['understood']}")
+            st.write(ans["answer"])
+            open_label = "Open bridge" if ans["kind"] == "estimate_bridge_cost" else "View on map"
+            for b in ans["bridges"][:5]:
+                r1, r2, r3 = st.columns([3, 1, 1], gap="small")
+                veh = (f" · About {b['vehicles_per_day']:,} vehicles a day"
+                       if b.get("vehicles_per_day") else "")
+                yr = f" · Target {b['target_year']}" if b.get("target_year") else ""
+                r1.markdown(f"**{b['name']}**  \n{b['county']} · {b['status']}{veh}{yr}")
+                r2.button(open_label, key=f"ask_view_{b['stable_id']}",
+                          on_click=_ask_view, args=(b["stable_id"],))
+                r3.button("Send for Engineer Check", key=f"ask_send_{b['stable_id']}",
+                          on_click=send_for_check, args=(b["stable_id"],))
+            if ans.get("plan"):
+                pl = ans["plan"]
+                st.button("Open this plan", type="primary", on_click=_ask_open_plan,
+                          args=(pl["annual_budget"] / 1_000_000, pl["horizon_years"], pl["strategy"]))
+            st.button("Clear", on_click=_ask_clear)
     g1, g2, g3 = st.columns([1, 1, 1], gap="large")
     g2.button("How to use myBridge ->", type="tertiary", width="stretch", on_click=go_to, args=("guide",))
 
