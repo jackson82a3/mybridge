@@ -879,9 +879,9 @@ if page == "home":
                 unsafe_allow_html=True,
             )
             inquiries = [
-                "Identify bridges requiring major repair in Chisago County.",
+                "Identify bridges requiring major repair in Marion County.",
                 "Prepare a prioritized five-year program within $40 million annually.",
-                "Provide a planning-level estimate to replace MN 243 over the St. Croix River.",
+                "Provide a planning-level estimate for I-65 SB over Keystone Avenue.",
             ]
             for i, text in enumerate(inquiries):
                 st.button("\u203a " + text, key=f"ask_chip_{i}", width="stretch",

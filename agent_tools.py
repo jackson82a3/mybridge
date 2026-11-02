@@ -62,6 +62,17 @@ def _status_title(row):
     return "Doing well for now"
 
 
+_ROUTE_TOKEN = re.compile(r"(?i)^(us|mn|i|sr|cr|hwy)-?\d+$|^(us|mn|sr|i|cr)$")
+
+
+def _title_features(text):
+    words = []
+    for w in str(text).split():
+        core = w.strip(".,()")
+        words.append(w.upper() if _ROUTE_TOKEN.match(core) else w.capitalize())
+    return " ".join(words)
+
+
 def _human_bridge(row):
     adt = row.get("adt")
     vehicles = None
@@ -69,7 +80,7 @@ def _human_bridge(row):
         vehicles = int(round(float(adt) / 100.0) * 100)
     return {
         "stable_id": row["stable_id"],
-        "name": f"{_clean_text(row.get('facility_carried'))} over {_clean_text(row.get('features_intersected'))}",
+        "name": f"{_clean_text(row.get('facility_carried'))} over {_title_features(_clean_text(row.get('features_intersected')))}",
         "county": clean_county(row.get("county_name")),
         "status": _status_title(row),
         "vehicles_per_day": vehicles,
@@ -150,15 +161,29 @@ def _find_bridge(df, query):
     q = str(query or "")
     m = re.search(r"(.+?)\s+over\s+(.+)", q, flags=re.I)
     fac_q, feat_q = (m.group(1), m.group(2)) if m else (q, "")
-    fac_n = _norm(fac_q)
-    feat_n = _norm(feat_q.rstrip("?. "))
+    feat_q = re.sub(r"^(the|a|an)\s+", "", feat_q.strip(), flags=re.I).rstrip("?. ")
     fac = df["facility_carried"].astype(str).map(_norm)
     feat = df["features_intersected"].astype(str).map(_norm)
-    hits = df[fac.str.contains(fac_n, regex=False)] if fac_n else df
-    if feat_n:
-        hits = hits[feat.loc[hits.index].str.contains(feat_n[:12], regex=False)]
-    if hits.empty and feat_n:
-        hits = df[feat.str.contains(feat_n[:12], regex=False)]
+    words = fac_q.split()
+    tries = [fac_q] + [" ".join(words[-n:]) for n in (3, 2, 1) if len(words) >= n]
+    hits = df.iloc[0:0]
+    for cand in tries:
+        cn = _norm(cand)
+        if not cn:
+            continue
+        h = df[fac.str.contains(cn, regex=False)]
+        if not h.empty:
+            hits = h
+            break
+    if hits.empty:
+        hits = df
+    if feat_q:
+        fn = _norm(feat_q)[:14]
+        h2 = hits[feat.loc[hits.index].str.contains(fn, regex=False)]
+        if h2.empty:
+            h2 = df[feat.str.contains(fn, regex=False)]
+        if not h2.empty:
+            hits = h2
     if hits.empty:
         raise ValueError("no bridge matched that name")
     return hits.sort_values("P_POOR_5YR", ascending=False).iloc[0]
@@ -313,13 +338,13 @@ def _keyword_parse(question, df):
         strategy = "best_value" if "best value" in q else "fix_fair_first" if "fair" in q else "worst_first"
         return {"tool": "build_budget_plan",
                 "params": {"annual_budget": amount or 50_000_000, "horizon_years": 5, "strategy": strategy}}
-    if ("how much" in q or "cost" in q or "replace" in q or "rehabilitat" in q) and " over " in q:
+    if ("how much" in q or "cost" in q or "estimate" in q or "replace" in q or "rehabilitat" in q) and " over " in q:
         action = "replacement" if "replac" in q else "rehabilitation" if "rehabilitat" in q else None
         return {"tool": "estimate_bridge_cost", "params": {"query": str(question), "action": action}}
     if "how many" in q or "summary" in q or "overview of" in q:
         return {"tool": "get_network_summary", "params": {"county": county}}
     status = None
-    if "major work now" in q or "repair now" in q or "needing work" in q or "need work" in q or "needs work" in q:
+    if "major work now" in q or "repair now" in q or "needing work" in q or "need work" in q or "needs work" in q or "major repair" in q:
         status = "repair_now"
     elif "repair soon" in q or "plan soon" in q:
         status = "repair_soon"
@@ -385,7 +410,7 @@ def _template_summary(result):
         lead += f", beginning with {top['name']} in {top['county']} ({top['target_year']})"
     lead += (f". About {result['deferred_count']} bridges would stay on the watch list. "
              f"Early planning range: {_money(result['total_low'])} to {_money(result['total_high'])} "
-             f"in total. Open the plan below to see it in Planning & Budget.")
+             f"in total. Open the plan below to see it in Plan & Estimate.")
     return lead.strip()
 
 
@@ -396,9 +421,11 @@ def _llama_wording(question, result, client_factory, model):
         model=model, temperature=0.25, max_tokens=180,
         messages=[
             {"role": "system",
-             "content": "You are myBridge. Using ONLY the result JSON, write 2-3 short sentences "
-                        "for a non-engineer. Do not invent numbers, costs, causes, or dates. "
-                        "Poor means needs major repair, not unsafe to cross."},
+             "content": "You are myBridge, an asset-management assistant. Using ONLY the result "
+                        "JSON, write 2-3 concise, professional sentences for a bridge program "
+                        "manager. Do not invent numbers, costs, causes, or dates. Do not use "
+                        "casual wording. Never expose raw field names. Poor means needs major "
+                        "repair, not unsafe to cross."},
             {"role": "user", "content": "Question: " + question + "\nResult JSON:\n"
              + json.dumps(payload, default=str)},
         ],
