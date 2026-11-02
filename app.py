@@ -471,6 +471,51 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.markdown(
+    """
+<style>
+/* GLOBAL INPUT FIX - must stay last */
+[data-testid="stTextInput"], [data-testid="stNumberInput"], [data-testid="stTextArea"],
+[data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="select"] {
+  background: rgba(255,255,255,0.05) !important; background-color: rgba(255,255,255,0.05) !important;
+  color: #F5F5F7 !important; -webkit-text-fill-color: #F5F5F7 !important; caret-color: #D4AF37 !important;
+  border: 1px solid rgba(255,255,255,0.10) !important; border-radius: 14px !important; box-shadow: none !important; }
+[data-testid="stTextInput"] input, [data-testid="stNumberInput"] input, [data-testid="stTextArea"] textarea,
+[data-baseweb="input"] input, [data-baseweb="base-input"] input, [data-baseweb="select"] input {
+  background: transparent !important; background-color: transparent !important;
+  color: #F5F5F7 !important; -webkit-text-fill-color: #F5F5F7 !important; caret-color: #D4AF37 !important;
+  border: none !important; box-shadow: none !important; outline: none !important; }
+[data-testid="stTextInput"] input::placeholder, [data-testid="stNumberInput"] input::placeholder,
+[data-testid="stTextArea"] textarea::placeholder {
+  color: #8E8E93 !important; -webkit-text-fill-color: #8E8E93 !important; opacity: 1 !important; }
+[data-testid="stTextInput"]:focus-within, [data-testid="stNumberInput"]:focus-within,
+[data-testid="stTextArea"]:focus-within, [data-baseweb="input"]:focus-within,
+[data-baseweb="base-input"]:focus-within, [data-baseweb="select"]:focus-within {
+  border-color: rgba(212,175,55,0.55) !important; box-shadow: 0 0 0 1px rgba(212,175,55,0.25) !important; outline: none !important; }
+[data-testid="stWidgetLabel"] p { color: #9A9AA0 !important; }
+[data-testid="InputInstructions"] { display: none !important; }
+[data-testid="stNumberInput"] button, [data-testid="stNumberInputStepUp"], [data-testid="stNumberInputStepDown"] {
+  background: rgba(255,255,255,0.08) !important; color: #F5F5F7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
+[data-testid="stFileUploaderDropzone"] {
+  background: rgba(255,255,255,0.03) !important; border: 1px dashed rgba(255,255,255,0.14) !important; color: #C7C7CC !important; }
+[data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color: #C7C7CC !important; }
+[data-testid="stFileUploaderDropzone"] button {
+  background: rgba(255,255,255,0.08) !important; color: #FFFFFF !important; border: 1px solid rgba(255,255,255,0.14) !important; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+components.html(
+    "<script>"
+    "const _fixInputs=()=>{window.parent.document.querySelectorAll('input, textarea')"
+    ".forEach(el=>{el.setAttribute('spellcheck','false');el.setAttribute('autocomplete','off');"
+    "el.setAttribute('autocorrect','off');el.setAttribute('autocapitalize','off');});};"
+    "_fixInputs();setTimeout(_fixInputs,300);setTimeout(_fixInputs,1000);"
+    "</script>",
+    height=0,
+)
+
 page = st.session_state.page
 
 # ================= HOME =================
@@ -514,16 +559,6 @@ elif page == "explore":
 
     q = st.text_input("Search", placeholder="Search a road, river, town, or county",
                       key="bridge_search")
-    components.html(
-        "<script>"
-        "const _fixSearch=()=>{const el=window.parent.document.querySelector("
-        "'.st-key-bridge_search input');if(el){el.setAttribute('spellcheck','false');"
-        "el.setAttribute('autocomplete','off');el.setAttribute('autocorrect','off');"
-        "el.setAttribute('autocapitalize','off');}};"
-        "_fixSearch();setTimeout(_fixSearch,300);setTimeout(_fixSearch,1000);"
-        "</script>",
-        height=0,
-    )
     pf = st.session_state.risk_filter
     p1, p2, p3 = st.columns(3, gap="medium")
     p1.button("All", type="primary" if pf == "all" else "secondary", width="stretch",
@@ -718,7 +753,10 @@ elif page == "engineer":
 
     sid, rrow = selected_row()
     with st.container(border=True):
-        st.markdown(f"**Under review: {bridge_name(rrow)}**")
+        st.markdown(
+            f'<div style="font-weight:700;font-size:16px;color:#F5F5F7;">Under review: {bridge_name(rrow)}</div>',
+            unsafe_allow_html=True,
+        )
         st.markdown(
             f'<div class="caption">{clean_county(rrow["county_name"])} &mdash; '
             f"{rrow['status_title']}, {rrow['P_POOR_5YR']:.0%} chance in 5 years.</div>",
