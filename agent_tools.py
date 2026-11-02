@@ -90,9 +90,10 @@ def _human_bridge(row):
 def _money(v):
     v = float(v)
     if abs(v) >= 1_000_000:
-        return f"${v / 1_000_000:,.1f}M"
-    if abs(v) >= 1_000:
-        return f"${v / 1_000:,.0f}K"
+        text = f"{v / 1_000_000:,.1f}".removesuffix(".0")
+        return f"${text}M"
+    if abs(v) >= 10_000:
+        return f"${v / 1_000:,.0f}k"
     return f"${v:,.0f}"
 
 

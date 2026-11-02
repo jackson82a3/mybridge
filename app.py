@@ -2,10 +2,13 @@
 # Reads ONLY data/app_data.parquet.
 # Plain language everywhere except the engineer technical expander.
 
+import hashlib
+import io
 import json
 import os
 import re
 import textwrap
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -280,10 +283,30 @@ if "page" not in st.session_state:
     st.session_state.page = "home"
 if "selected_bridge" not in st.session_state:
     st.session_state.selected_bridge = df.sort_values("P_POOR_5YR", ascending=False).iloc[0]["stable_id"]
+if "review_queue" not in st.session_state:
+    st.session_state.review_queue = {}
+if isinstance(st.session_state.review_queue, list):  # legacy list -> dict
+    st.session_state.review_queue = {
+        sid: {"status": "Waiting for check", "submitted_from": "Explore",
+              "queued_at": datetime.now().isoformat(timespec="seconds")}
+        for sid in st.session_state.review_queue}
+if "decisions" not in st.session_state:
+    st.session_state.decisions = []
+if "approved_ids" not in st.session_state:
+    st.session_state.approved_ids = set()
+st.session_state.approved_ids = {
+    d["stable_id"] for d in st.session_state.decisions if d.get("decision") == "Approved"}
 if "approved_list" not in st.session_state:
     st.session_state.approved_list = []
-if "review_queue" not in st.session_state:
-    st.session_state.review_queue = []
+st.session_state.approved_list = sorted(st.session_state.approved_ids)
+if "review_selected" not in st.session_state:
+    st.session_state.review_selected = None
+if "rating_cache" not in st.session_state:
+    st.session_state.rating_cache = {}
+if "last_decision" not in st.session_state:
+    st.session_state.last_decision = None
+if "review_notice" not in st.session_state:
+    st.session_state.review_notice = None
 if "risk_filter" not in st.session_state:
     st.session_state.risk_filter = "all"
 if "show_summary" not in st.session_state:
@@ -341,9 +364,123 @@ def _toggle_hr(sid):
         None if st.session_state.expanded_bridge == sid else sid)
 
 
-def send_for_check(sid):
-    if sid not in st.session_state.review_queue:
-        st.session_state.review_queue.append(sid)
+
+ACTIVE_QUEUE_STATUSES = ("Waiting for check", "Under review", "Load rating verified")
+
+
+def submit_for_review(sid, source="Explore"):
+    """Queue a bridge for Engineer-in-the-Loop. Prevents duplicates."""
+    q = st.session_state.review_queue
+    entry = q.get(sid)
+    if entry and entry.get("status") in ACTIVE_QUEUE_STATUSES:
+        st.session_state.review_notice = "That bridge is already waiting for an engineer check."
+        return False
+    q[sid] = {"status": "Waiting for check", "submitted_from": source,
+              "queued_at": datetime.now().isoformat(timespec="seconds")}
+    match = df[df["stable_id"] == sid]
+    name = bridge_name(match.iloc[0]) if not match.empty else "Bridge"
+    st.session_state.review_notice = f"Added for engineer check: {name}."
+    return True
+
+
+def _select_review(sid):
+    st.session_state.selected_bridge = sid
+    st.session_state.review_selected = sid
+    entry = st.session_state.review_queue.get(sid)
+    if entry and entry.get("status") == "Waiting for check":
+        entry["status"] = "Under review"
+
+
+def _chance_phrase(row):
+    if int(row["IS_ALREADY_POOR"]) == 1:
+        return "Already in poor condition"
+    return f"{float(row['P_POOR_5YR']) * 100:.0f}% chance in 5 years"
+
+
+def _capacity_guidance(inv_rf, op_rf):
+    if op_rf < 1.0:
+        return ("Capacity concern",
+                "The operating check is below 1.0, so this bridge may need posting "
+                "or strengthening considered before any plan is approved.")
+    if inv_rf < 1.0:
+        return ("Worth monitoring",
+                "The operating check is adequate, but the inventory check is below "
+                "1.0, so heavier everyday loads deserve a closer look.")
+    return ("Capacity looks adequate",
+            "Both load checks are at or above 1.0, so capacity does not appear to "
+            "limit the options for this bridge.")
+
+
+def _rf_value(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if pd.isna(f) else f
+
+
+_RATING_KEYS = ("bridge_id", "rating_date", "software", "method",
+                "controlling_member", "inventory_rf", "operating_rf",
+                "posting_recommended")
+
+
+def _parse_rating_bytes(raw, file_name):
+    """Parse a load rating file locally. CSV is read directly; PDF/TXT text is
+    extracted locally and, when Llama is configured, structured by Llama at
+    temperature 0. Returns only the whitelisted rating fields."""
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    out = {k: None for k in _RATING_KEYS}
+    try:
+        if ext == "csv":
+            frame = pd.read_csv(io.BytesIO(raw), dtype=str)
+            if frame.empty:
+                return out
+            row = {str(k).strip().lower(): v for k, v in frame.iloc[0].to_dict().items()}
+            for k in _RATING_KEYS:
+                if k in row and not (isinstance(row[k], float) and pd.isna(row[k])):
+                    out[k] = row[k]
+            out["inventory_rf"] = _rf_value(out["inventory_rf"])
+            out["operating_rf"] = _rf_value(out["operating_rf"])
+            return out
+        if ext == "pdf":
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(raw)) as pdf:
+                text = "\n".join((pg.extract_text() or "") for pg in pdf.pages)
+        else:
+            text = raw.decode("utf-8", errors="ignore")
+        text = text[:8000]
+        if _skip_reason() is not None:
+            return out
+        resp = _llama_client().chat.completions.create(
+            model=LLAMA_MODEL, temperature=0, max_tokens=300,
+            messages=[
+                {"role": "system",
+                 "content": "Extract load rating fields. Return ONLY JSON with keys "
+                            "rating_date, software, method, controlling_member, "
+                            "inventory_rf, operating_rf, posting_recommended. Use null "
+                            "for anything not present. Never invent values."},
+                {"role": "user", "content": text},
+            ],
+        )
+        raw_text = (resp.choices[0].message.content or "").strip()
+        raw_text = re.sub(r"^```(?:json)?|```$", "", raw_text).strip()
+        parsed = json.loads(raw_text)
+        for k in _RATING_KEYS:
+            if k in parsed:
+                out[k] = parsed[k]
+        out["inventory_rf"] = _rf_value(out["inventory_rf"])
+        out["operating_rf"] = _rf_value(out["operating_rf"])
+        if isinstance(out.get("posting_recommended"), bool):
+            out["posting_recommended"] = "Yes" if out["posting_recommended"] else "No"
+    except Exception:
+        pass  # silent fallback: engineer enters values manually
+    return out
+
+
+def send_for_check(sid, source="Explore"):
+    submit_for_review(sid, source)
+    st.session_state.selected_bridge = sid
+    st.session_state.review_selected = sid
     st.session_state.page = "engineer"
 
 
@@ -382,8 +519,11 @@ def _ask_view(sid):
 def format_money(v):
     v = float(v)
     if abs(v) >= 1_000_000:
-        return f"${v / 1_000_000:,.1f}M"
-    return f"${v / 1_000:,.0f}k"
+        text = f"{v / 1_000_000:,.1f}".removesuffix(".0")
+        return f"${text}M"
+    if abs(v) >= 10_000:
+        return f"${v / 1_000:,.0f}k"
+    return f"${v:,.0f}"
 
 
 def _row_subline(row):
@@ -418,8 +558,7 @@ def _focus_plan(sid):
 
 def _send_shortlist(ids):
     for sid in ids:
-        if sid not in st.session_state.review_queue:
-            st.session_state.review_queue.append(sid)
+        submit_for_review(sid, "Plan & Estimate")
     st.session_state.page = "engineer"
 
 
@@ -468,7 +607,8 @@ def render_bridge_list(items, mode):
                     v1.button("View bridge", key=f"list_view_{it['sid']}", width="stretch",
                               on_click=_ask_view, args=(it["sid"],))
                     v2.button("Send to Engineer-in-the-Loop", key=f"list_send_{it['sid']}",
-                              width="stretch", on_click=send_for_check, args=(it["sid"],))
+                              width="stretch", on_click=send_for_check,
+                              args=(it["sid"], "High Risk"))
                     with st.expander("How this estimate is built"):
                         st.markdown(_breakdown_text(est))
 
@@ -855,7 +995,7 @@ if page == "home":
         t1, t2, t3 = st.columns(3, gap="large")
         t1.button("Explore",
                   key="tile_explore", width="stretch", on_click=go_to, args=("explore",))
-        t2.button("Plan & Estimate",
+        t2.button("$ Plan & Estimate",
                   key="tile_plan", width="stretch", on_click=go_to, args=("plan",))
         t3.button("Engineer-in-the-Loop",
                   key="tile_engineer", width="stretch", on_click=go_to, args=("engineer",))
@@ -904,7 +1044,7 @@ if page == "home":
                 r2.button(open_label, key=f"ask_view_{b['stable_id']}",
                           on_click=_ask_view, args=(b["stable_id"],))
                 r3.button("Send to Engineer-in-the-Loop", key=f"ask_send_{b['stable_id']}",
-                          on_click=send_for_check, args=(b["stable_id"],))
+                          on_click=send_for_check, args=(b["stable_id"], "Ask myBridge"))
             if ans.get("plan"):
                 pl = ans["plan"]
                 st.button("See this plan", type="primary", on_click=_ask_open_plan,
@@ -1021,11 +1161,15 @@ elif page == "explore":
             f"</div>",
             unsafe_allow_html=True,
         )
+        if sid in st.session_state.get("approved_ids", set()):
+            st.markdown(
+                '<span class="pill pill-likely">Approved for funding plan</span>',
+                unsafe_allow_html=True)
         c1, c2 = st.columns(2, gap="large")
         if c1.button("Overview", type="primary", width="stretch"):
             st.session_state.show_summary = not st.session_state.show_summary
         c2.button("Send to Engineer-in-the-Loop", type="tertiary", width="stretch",
-                  on_click=send_for_check, args=(sid,))
+                  on_click=send_for_check, args=(sid, "Explore"))
         if st.session_state.show_summary:
             with st.container(border=True):
                 _cache = st.session_state.setdefault("overview_cache", {})
@@ -1134,7 +1278,10 @@ elif page == "highrisk":
                 "sid": tr["stable_id"], "row": tr, "est": est,
                 "line1": tr["disp_name"],
                 "line2": (f"{tr['status_title']} \u00b7 {clean_county(tr['county_name'])} \u00b7 "
-                          f"{format_money(est['likely'])} \u00b7 {year_label}"),
+                          f"{format_money(est['likely'])} \u00b7 {year_label}"
+                          + (" \u00b7 Approved for funding plan"
+                             if tr["stable_id"] in st.session_state.get("approved_ids", set())
+                             else "")),
             })
         render_bridge_list(items, "expand")
         if len(hr) > st.session_state.hr_limit:
@@ -1143,9 +1290,9 @@ elif page == "highrisk":
 # ================= PLAN & ESTIMATE =================
 elif page == "plan":
     render_nav([("← Home", "home", "nav_home"), ("← Explore", "explore", "nav_explore")])
-    st.markdown("## Plan & Estimate")
+    st.markdown("## $ Plan & Estimate")
     with st.container(border=True):
-        budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM", key="plan_budget")
+        budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM/yr", key="plan_budget")
         horizon = st.slider("Plan years", 1, 10, 5, 1, key="plan_horizon")
         strategy = st.selectbox(
             "Strategy",
@@ -1168,8 +1315,8 @@ elif page == "plan":
         plan = st.session_state.plan_result
         funded = plan["funded"]
         st.write(
-            f"With ${budget}M a year for the next {horizon} years, we could start with the "
-            f"{len(funded)} bridges that need it most."
+            f"With {format_money(budget * 1_000_000)} a year for the next {horizon} years, "
+            f"we could start with the {len(funded)} bridges that need it most."
         )
     if not funded:
         st.markdown(
@@ -1201,7 +1348,7 @@ elif page == "plan":
                 unsafe_allow_html=True)
             years = [a["year"] for a in annual]
             totals = [a["count"] for a in annual]
-            hover_cd = [[f"{a['low'] / 1e6:.1f}", f"{a['high'] / 1e6:.1f}",
+            hover_cd = [[format_money(a["low"]), format_money(a["high"]),
                          a["count"], a["cumulative_count"]] for a in annual]
             action_colors = {"Plan replacement": "#C96A6A",
                              "Plan rehabilitation": "#E6DFCE",
@@ -1215,7 +1362,7 @@ elif page == "plan":
                     marker=dict(color=color),
                     customdata=hover_cd,
                     hovertemplate=("%{x}<br>%{customdata[2]} bridges starting<br>"
-                                   "Planning estimate $%{customdata[0]}M \u2013 $%{customdata[1]}M<br>"
+                                   "Planning estimate %{customdata[0]} \u2013 %{customdata[1]}<br>"
                                    "%{customdata[3]} planned by end of %{x}<extra></extra>"),
                 ))
             fig.add_trace(go.Scatter(
@@ -1260,7 +1407,7 @@ elif page == "plan":
                 "sid": f["stable_id"], "row": fr, "est": None,
                 "line1": fr["disp_name"],
                 "line2": (f"{fr['status_title']} \u00b7 {clean_county(fr['county_name'])} \u00b7 "
-                          f"{format_money(f['likely'])} \u00b7 Start {f['target_year']}"),
+                          f"{format_money(f['likely'])} in {f['target_year']}"),
             })
         with st.container(border=True):
             st.markdown("**Funded program**")
@@ -1284,79 +1431,336 @@ elif page == "engineer":
     st.markdown("## Engineer-in-the-Loop")
     st.markdown('<div class="caption">myBridge suggests. You confirm.</div>', unsafe_allow_html=True)
 
+    _notice = st.session_state.pop("review_notice", None)
+    if _notice:
+        st.success(_notice)
+    _last = st.session_state.get("last_decision")
+    if _last:
+        st.success(
+            f"Decision {_last['decision_id']} recorded: {_last['bridge_name']} — "
+            f"{_last['decision']} ({_last['final_action']}, act by {_last['final_year']})."
+        )
+
+    queue = st.session_state.review_queue
+    approved_ids = st.session_state.get("approved_ids", set())
+    n_wait = sum(1 for e in queue.values() if e.get("status") == "Waiting for check")
+    n_under = sum(1 for e in queue.values() if e.get("status") == "Under review")
+    c_wait, c_under, c_appr = st.columns(3, gap="medium")
+    c_wait.metric("Waiting for check", f"{n_wait:,}")
+    c_under.metric("Under review", f"{n_under:,}")
+    c_appr.metric("Approved this session", f"{len(approved_ids):,}")
+
+    active_ids = [sid for sid, e in queue.items()
+                  if e.get("status") in ACTIVE_QUEUE_STATUSES]
     with st.container(border=True):
-        st.markdown("**Waiting for engineer check**")
-        if not st.session_state.review_queue:
+        st.markdown("**Review queue**")
+        if not active_ids:
             st.markdown(
-                '<div class="caption">Queue is empty. Send bridges here from Explore.</div>',
+                '<div class="caption">Queue is empty. Send bridges here from Explore, '
+                "High Risk, or Plan &amp; Estimate.</div>",
                 unsafe_allow_html=True,
             )
-        for qsid in st.session_state.review_queue:
+        status_pill = {
+            "Waiting for check": "pill-gray",
+            "Under review": "pill-likely",
+            "Load rating verified": "pill-green",
+        }
+        for qsid in active_ids:
             qr = df[df["stable_id"] == qsid]
             if qr.empty:
                 continue
             qr = qr.iloc[0]
-            if st.button(
-                f"{bridge_name(qr)} - {clean_county(qr['county_name'])} - {qr['P_POOR_5YR']:.0%}"
-                + ("  [Approved]" if qsid in st.session_state.approved_list else ""),
-                key=f"q_{qsid}",
-                width="stretch",
-            ):
-                st.session_state.selected_bridge = qsid
+            entry = queue[qsid]
+            qcols = st.columns([5, 2], gap="medium")
+            qcols[0].button(
+                f"{bridge_name(qr)}\n{qr['status_title']} · "
+                f"{clean_county(qr['county_name'])} · {_chance_phrase(qr)} · "
+                f"From {entry.get('submitted_from', 'Explore')}",
+                key=f"qrow_{qsid}", width="stretch",
+                on_click=_select_review, args=(qsid,),
+            )
+            qcols[1].markdown(
+                f'<span class="pill {status_pill.get(entry.get("status"), "pill-gray")}">'
+                f"{entry.get('status')}</span>",
+                unsafe_allow_html=True,
+            )
 
-    sid, rrow = selected_row()
+    # ---- Review workspace for the selected bridge ----
+    ws_sid = st.session_state.get("review_selected") or st.session_state.selected_bridge
+    if ws_sid not in set(df["stable_id"]):
+        ws_sid = st.session_state.selected_bridge
+    _, rrow = selected_row() if ws_sid == st.session_state.selected_bridge else (
+        ws_sid, df[df["stable_id"] == ws_sid].iloc[0])
+    ws_entry = queue.get(ws_sid, {})
+    act_by = max(int(rrow["PROGRAM_YEAR"]), 2027)
+
     with st.container(border=True):
+        st.markdown(f"### {bridge_name(rrow)}")
+        if ws_sid in approved_ids:
+            st.markdown(
+                '<span class="pill pill-likely">Approved for funding plan</span>',
+                unsafe_allow_html=True,
+            )
+        st.markdown("**myBridge suggestion — cannot be edited**")
         st.markdown(
-            f'<div style="font-weight:700;font-size:16px;color:#F5F5F7;">Under review: {bridge_name(rrow)}</div>',
+            f'<div class="caption">{rrow["status_title"]} · Suggested next step: '
+            f'{rrow["action_plain"]} · Act by {act_by} · {_chance_phrase(rrow)} · '
+            f'{clean_county(rrow["county_name"])}</div>',
             unsafe_allow_html=True,
         )
-        st.markdown(
-            f'<div class="caption">{clean_county(rrow["county_name"])} &mdash; '
-            f"{rrow['status_title']}, {rrow['P_POOR_5YR']:.0%} chance in 5 years.</div>",
-            unsafe_allow_html=True,
+
+        st.markdown("**Load rating**")
+        sample_path = "data/sample_load_rating.csv"
+        if os.path.exists(sample_path):
+            with open(sample_path, "rb") as _sf:
+                st.download_button(
+                    "Download sample load rating (CSV)", _sf.read(),
+                    "sample_load_rating.csv", "text/csv", key="er_sample_dl",
+                )
+        er_up = st.file_uploader(
+            "Upload load rating", type=["csv", "pdf", "txt"], key="er_upload")
+        rating = {}
+        file_sha, file_name, mismatch = "", "", False
+        if er_up is not None:
+            raw = er_up.getvalue()
+            file_sha = hashlib.sha256(raw).hexdigest()
+            file_name = er_up.name
+            cache_key = f"{ws_sid}|{file_name}|{file_sha}"
+            if cache_key not in st.session_state.rating_cache:
+                st.session_state.rating_cache[cache_key] = _parse_rating_bytes(
+                    raw, file_name)
+            rating = dict(st.session_state.rating_cache[cache_key])
+            up_bid = str(rating.get("bridge_id") or "").strip()
+            mismatch = bool(up_bid) and up_bid != str(ws_sid)
+            if mismatch:
+                st.warning(
+                    "This file names a different bridge than the one under review. "
+                    "Check the file, or acknowledge below to attach it anyway."
+                )
+                st.checkbox(
+                    "I understand this file names a different bridge and I want to "
+                    "attach it anyway.",
+                    key=f"er_ack_{ws_sid}_{file_sha[:8]}",
+                )
+            editor_df = pd.DataFrame([{
+                "Rating date": rating.get("rating_date") or "",
+                "Software": rating.get("software") or "",
+                "Method": rating.get("method") or "",
+                "Controlling member": rating.get("controlling_member") or "",
+                "Inventory RF": rating.get("inventory_rf"),
+                "Operating RF": rating.get("operating_rf"),
+                "Posting recommended": rating.get("posting_recommended") or "",
+            }])
+            edited = st.data_editor(
+                editor_df, key=f"er_editor_{ws_sid}_{file_sha[:8]}",
+                hide_index=True, width="stretch",
+            )
+            erow = edited.iloc[0]
+            rating.update({
+                "rating_date": erow["Rating date"],
+                "software": erow["Software"],
+                "method": erow["Method"],
+                "controlling_member": erow["Controlling member"],
+                "inventory_rf": _rf_value(erow["Inventory RF"]),
+                "operating_rf": _rf_value(erow["Operating RF"]),
+                "posting_recommended": erow["Posting recommended"],
+            })
+            st.markdown(
+                f'<div class="caption">File: {file_name} · '
+                f"Fingerprint (SHA-256): {file_sha[:16]}…</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="caption">Upload a CSV, PDF, or text load rating, '
+                "or enter the checks manually below.</div>",
+                unsafe_allow_html=True,
+            )
+        er_inv_manual = st.number_input(
+            "Inventory check (RF)", min_value=0.0, value=0.0, step=0.01, key="er_inv_rf")
+        er_op_manual = st.number_input(
+            "Operating check (RF)", min_value=0.0, value=0.0, step=0.01, key="er_op_rf")
+        inv_rf = rating.get("inventory_rf")
+        if inv_rf is None and er_inv_manual > 0:
+            inv_rf = float(er_inv_manual)
+        op_rf = rating.get("operating_rf")
+        if op_rf is None and er_op_manual > 0:
+            op_rf = float(er_op_manual)
+
+        verified = st.checkbox(
+            "I verified these values against the load rating report.",
+            key=f"er_verified_{ws_sid}",
         )
-        if sid in st.session_state.approved_list:
-            st.markdown('<span class="pill pill-green">Approved &#10003;</span>', unsafe_allow_html=True)
+        if ws_sid in queue and queue[ws_sid].get("status") in ACTIVE_QUEUE_STATUSES:
+            if verified:
+                queue[ws_sid]["status"] = "Load rating verified"
+            elif queue[ws_sid].get("status") == "Load rating verified":
+                queue[ws_sid]["status"] = "Under review"
+
+        if inv_rf is not None and op_rf is not None:
+            level, guidance = _capacity_guidance(inv_rf, op_rf)
+            st.markdown(f"**Capacity guidance — {level}**")
+            st.markdown(f'<div class="caption">{guidance}</div>', unsafe_allow_html=True)
+
+        st.markdown("**Your decision**")
+        action_options = [
+            "Plan replacement", "Plan rehabilitation", "Preventive work",
+            "Monitor — no major work", "Request re-inspection",
+        ]
+        default_action = {
+            "Plan replacement": 0, "Plan rehabilitation": 1,
+        }.get(rrow["action_plain"], 2)
+        final_action = st.selectbox(
+            "Final action", action_options, index=default_action, key="er_final_action")
+        final_year = st.number_input(
+            "Final Act-by year", min_value=2027, max_value=2060, value=act_by,
+            step=1, key="er_final_year")
+        decision_choice = st.radio(
+            "Decision", ["Approve", "Reject", "Defer"], horizontal=True, key="er_decision")
+        notes = st.text_area("Notes", key="er_notes", height=90)
+        defer_year = None
+        if decision_choice == "Defer":
+            defer_year = st.number_input(
+                "Review again in year", min_value=2027, max_value=2060, value=2028,
+                step=1, key="er_defer_year")
         er_name = st.text_input("Your name", key="er_name")
         er_license = st.text_input("License number", key="er_license")
-        er_up = st.file_uploader("Upload load check (CSV)", type=["csv"], key="er_upload")
-        if er_up is not None:
-            er_df = pd.read_csv(er_up)
-            st.write("Check the numbers before approving - edit below if needed:")
-            st.data_editor(er_df, key=f"er_editor_{er_up.file_id}",
-                           num_rows="dynamic", width="stretch")
-        er_inv = st.number_input("Inventory check (RF)", min_value=0.0, value=0.0,
-                                 step=0.01, key="er_inv_rf")
-        er_op = st.number_input("Operating check (RF)", min_value=0.0, value=0.0,
-                                step=0.01, key="er_op_rf")
-        ready = bool(er_name.strip()) and bool(er_license.strip()) and (
-            er_up is not None or (er_inv > 0 and er_op > 0)
+        attested = st.checkbox(
+            "I reviewed the load rating and confirm capacity was considered in "
+            "this decision.",
+            key="er_attest",
         )
-        e1, e2 = st.columns(2, gap="large")
-        if e1.button("Approve", type="primary", disabled=not ready, key="er_approve"):
-            if sid not in st.session_state.approved_list:
-                st.session_state.approved_list.append(sid)
-            st.success(f"{bridge_name(rrow)} approved by {er_name.strip()} (license {er_license.strip()}).")
-        if e2.button("Reject", key="er_reject"):
-            st.info(f"{bridge_name(rrow)} sent back - flagged for follow-up.")
-    if st.session_state.approved_list:
-        with st.container(border=True):
-            st.markdown(f"**Approved for funding plan ({len(st.session_state.approved_list)})**")
-            adf = df[df["stable_id"].isin(st.session_state.approved_list)]
-            for _, ar in adf.iterrows():
-                st.markdown(
-                    f'<div class="caption">{bridge_name(ar)} &mdash; {clean_county(ar["county_name"])}</div>',
-                    unsafe_allow_html=True,
-                )
-            dl = pd.DataFrame({
-                "Bridge": adf["facility_carried"] + " over " + adf["features_intersected"].fillna(""),
-                LABELS["county_name"]: adf["county_name"],
-                "Overall condition today": adf["min_cond"].map(cond_word),
-                "Chance in 5 years": (adf["P_POOR_5YR"] * 100).round(1).astype(str) + "%",
-                LABELS["RECOMMENDED_ACTION"]: adf["action_plain"],
-            })
-            st.download_button("Download approved list (CSV)", dl.to_csv(index=False).encode(),
-                               "mybridge_approved.csv", "text/csv")
+        ack_ok = (not mismatch) or bool(
+            st.session_state.get(f"er_ack_{ws_sid}_{file_sha[:8]}"))
+        missing = []
+        if not er_name.strip():
+            missing.append("your name")
+        if not er_license.strip():
+            missing.append("license number")
+        if not attested:
+            missing.append("attestation")
+        if not (verified or final_action in
+                ("Preventive work", "Monitor — no major work")):
+            missing.append("a verified load rating (or choose Preventive work / Monitor)")
+        if not ack_ok:
+            missing.append("acknowledgement that the file names a different bridge")
+        if decision_choice == "Reject" and not notes.strip():
+            missing.append("a reason in Notes for rejecting")
+        if decision_choice == "Defer" and not defer_year:
+            missing.append("a review year for deferring")
+        if missing:
+            st.markdown(
+                '<div class="caption">Still needed: ' + "; ".join(missing) + ".</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            '<div class="caption">Demo attestation only — not a verified PE seal.</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Submit decision", type="primary", disabled=bool(missing),
+                     key="er_submit"):
+            if final_action == "Request re-inspection":
+                decision_label = "Re-inspection requested"
+            else:
+                decision_label = {"Approve": "Approved", "Reject": "Rejected",
+                                  "Defer": "Deferred"}[decision_choice]
+            record = {
+                "decision_id": f"DEC-2026-{len(st.session_state.decisions) + 1:04d}",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "stable_id": ws_sid,
+                "bridge_name": bridge_name(rrow),
+                "county": clean_county(rrow["county_name"]),
+                "model_status": rrow["status_title"],
+                "model_suggestion": rrow["action_plain"],
+                "chance_at_review": float(rrow["P_POOR_5YR"]),
+                "engineer_name": er_name.strip(),
+                "license": er_license.strip(),
+                "decision": decision_label,
+                "final_action": final_action,
+                "final_year": int(final_year),
+                "review_year": int(defer_year) if defer_year else None,
+                "inventory_rf": inv_rf,
+                "operating_rf": op_rf,
+                "controlling_member": rating.get("controlling_member") or "",
+                "posting_recommended": rating.get("posting_recommended") or "",
+                "source_file": file_name,
+                "file_sha256": file_sha,
+                "notes": notes.strip(),
+            }
+            st.session_state.decisions.append(record)
+            if ws_sid in queue:
+                queue[ws_sid]["status"] = decision_label
+            st.session_state.approved_ids = {
+                d["stable_id"] for d in st.session_state.decisions
+                if d["decision"] == "Approved"}
+            st.session_state.approved_list = sorted(st.session_state.approved_ids)
+            st.session_state.last_decision = record
+            st.session_state.review_selected = next(
+                (s for s, e in queue.items()
+                 if e.get("status") in ACTIVE_QUEUE_STATUSES), ws_sid)
+            st.rerun()
+
+    decisions = st.session_state.decisions
+    approved_records = [d for d in decisions if d["decision"] == "Approved"]
+    with st.container(border=True):
+        st.markdown("**Approved Funding Plan**")
+        if not approved_records:
+            st.markdown(
+                '<div class="caption">No approved bridges yet this session.</div>',
+                unsafe_allow_html=True,
+            )
+        for d in approved_records:
+            st.markdown(
+                f'<div class="caption">{d["bridge_name"]} · {d["final_action"]} · '
+                f'Act by {d["final_year"]} · {d["engineer_name"]}</div>',
+                unsafe_allow_html=True,
+            )
+        if approved_records:
+            prog = pd.DataFrame([{
+                "Bridge": d["bridge_name"], "County": d["county"],
+                "Final action": d["final_action"], "Act-by year": d["final_year"],
+                "Engineer": d["engineer_name"], "Decision ID": d["decision_id"],
+                "Date": d["timestamp"][:10],
+            } for d in approved_records])
+            st.download_button(
+                "Download approved program (CSV)", prog.to_csv(index=False).encode(),
+                "approved_program.csv", "text/csv", key="dl_approved_program",
+            )
+    with st.container(border=True):
+        st.markdown("**Decision History**")
+        if not decisions:
+            st.markdown(
+                '<div class="caption">No decisions recorded yet this session.</div>',
+                unsafe_allow_html=True,
+            )
+        for d in decisions:
+            st.markdown(
+                f'<div class="caption">{d["decision_id"]} · {d["bridge_name"]} · '
+                f'{d["decision"]} · {d["final_action"]} · Act by {d["final_year"]} · '
+                f'{d["engineer_name"]} · {d["timestamp"][:10]}</div>',
+                unsafe_allow_html=True,
+            )
+        if decisions:
+            audit = pd.DataFrame([{
+                "Decision ID": d["decision_id"], "Date and time": d["timestamp"],
+                "Bridge": d["bridge_name"], "County": d["county"],
+                "myBridge suggestion": d["model_suggestion"],
+                "Chance at review": f"{d['chance_at_review']:.0%}",
+                "Engineer": d["engineer_name"], "License": d["license"],
+                "Decision": d["decision"], "Final action": d["final_action"],
+                "Act-by year": d["final_year"],
+                "Review year": d["review_year"] or "",
+                "Inventory RF": d["inventory_rf"] if d["inventory_rf"] is not None else "",
+                "Operating RF": d["operating_rf"] if d["operating_rf"] is not None else "",
+                "Controlling member": d["controlling_member"],
+                "Posting recommended": d["posting_recommended"],
+                "Source file": d["source_file"], "File SHA-256": d["file_sha256"],
+                "Notes": d["notes"],
+            } for d in decisions])
+            st.download_button(
+                "Download decision audit log (CSV)", audit.to_csv(index=False).encode(),
+                "decision_audit_log.csv", "text/csv", key="dl_audit_log",
+            )
     st.button("Plan & Estimate ->", type="tertiary", on_click=go_to, args=("plan",))
 
 # ================= GUIDE =================

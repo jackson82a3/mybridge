@@ -9,3 +9,4 @@ plotly
 folium
 streamlit-folium
 openai
+pdfplumber
