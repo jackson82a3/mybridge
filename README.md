@@ -2,13 +2,7 @@
 
 **Every bridge. Know when it needs you.**
 
-myBridge helps bridge owners find which bridges are likely to need major repair within the next 5 years — early enough to plan a rehabilitation instead of being forced into an urgent, expensive replacement.
-
-Built for the **Meta Hackathon — Indie Track (Solo)** · Submission: Nov 4, 2026
-
-**Live app:** [LIVE_APP_URL]  
-**Demo video (90s):** [DEMO_VIDEO_URL]
-
+myBridge helps bridge owners find which bridges are likely to need major repair within the next 5 years, early enough to plan a rehabilitation instead of being forced into an urgent, expensive replacement.
 ---
 
 ## The problem
