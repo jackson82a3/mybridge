@@ -4,11 +4,13 @@
 
 import json
 import os
+import textwrap
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="myBridge", layout="wide")
 
@@ -56,7 +58,8 @@ def load_data():
         ["Needs major work now", "Plan soon", "Plan ahead"],
         default="Doing well for now",
     )
-    soon = ("Very likely to need major work by " + (df["year"] + 5).astype(int).astype(str)
+    horizon_year = int(df["year"].max()) + 5 if "year" in df.columns else 2030
+    soon = ("Very likely to need major work by " + str(horizon_year)
             + ". About " + (p * 10).round().astype(int).astype(str)
             + " in 10 bridges like this needed major work within 5 years.")
     df["status_sentence"] = np.select(
@@ -70,15 +73,18 @@ def load_data():
     for _ in range(3):
         county = county.str.replace("County County", "County", regex=False)
     df["county_clean"] = county
-    name = df["facility_carried"].fillna("") + " over " + df["features_intersected"].fillna("")
+    disp_name = (df["facility_carried"].fillna("").astype(str).str.strip() + " over "
+                 + df["features_intersected"].fillna("").astype(str).str.strip().str.title())
     age_ok = df["age_effective"].notna()
     age_s = df["age_effective"].round().astype("Int64").astype(str)
     adt_ok = df["adt"].notna()
     adt_s = df["adt"].map(lambda v: f"{int(v):,}" if pd.notna(v) else "")
     ctx = county + np.where(age_ok, " · " + age_s + " years old", " · Age not on record")
     df["context"] = ctx + np.where(adt_ok, " · About " + adt_s + " vehicles a day", "")
-    df["hover_text"] = ("<b>" + name + "</b><br>" + county + "<br><br><b>"
-                        + df["status_title"] + "</b><br>" + df["status_sentence"])
+    wrapped = df["status_sentence"].astype(str).map(
+        lambda s: "<br>".join(textwrap.wrap(s, width=40)))
+    df["hover_text"] = ("<b>" + disp_name + "</b><br>" + county + "<br><br><b>"
+                        + df["status_title"] + "</b><br>" + wrapped)
     return df
 
 
@@ -134,7 +140,7 @@ def human_summary(row):
     cond = condition_words(row["min_cond"])
     cond_l = cond[0].lower() + cond[1:]
     action = row["action_plain"][0].lower() + row["action_plain"][1:]
-    year = int(row["PROGRAM_YEAR"])
+    year = max(int(row["PROGRAM_YEAR"]), 2027)
     s1 = (f"This {county} bridge is {cond_l} after roughly {age} years on the road."
           if age is not None else f"This {county} bridge is {cond_l}.")
     title = row["status_title"]
@@ -217,7 +223,7 @@ def generate_overview(row, status_title, status_sentence):
             "status": status_title,
             "chance_percent": int(round(row["P_POOR_5YR"] * 100)),
             "next_step": clean(row["action_plain"]),
-            "act_by_year": int(row["PROGRAM_YEAR"]),
+            "act_by_year": max(int(row["PROGRAM_YEAR"]), 2027),
         }
         resp = _llama_client().chat.completions.create(
             model=LLAMA_MODEL,
@@ -251,6 +257,8 @@ def generate_overview(row, status_title, status_sentence):
 
 df = load_data()
 
+BASE_YEAR = int(df["year"].max()) if "year" in df.columns else 2025
+HORIZON_YEAR = BASE_YEAR + 5
 if "page" not in st.session_state:
     st.session_state.page = "home"
 if "selected_bridge" not in st.session_state:
@@ -453,6 +461,11 @@ st.markdown(
 .st-key-nav_home button:hover, .st-key-nav_explore button:hover {
   background: rgba(212,175,55,0.10) !important; border-color: rgba(212,175,55,0.35) !important; color: #FFFFFF !important;
 }
+
+.st-key-bridge_search input { background: rgba(255,255,255,0.05) !important; color: #F5F5F7 !important; -webkit-text-fill-color: #F5F5F7 !important; caret-color: #D4AF37; border: 1px solid rgba(255,255,255,0.10) !important; border-radius: 14px !important; }
+.st-key-bridge_search input::placeholder { color: #8E8E93 !important; opacity: 1 !important; }
+.st-key-bridge_search input:focus { border-color: rgba(212,175,55,0.55) !important; box-shadow: 0 0 0 1px rgba(212,175,55,0.22) !important; outline: none !important; }
+.st-key-bridge_search label p { color: #9A9AA0 !important; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -499,7 +512,18 @@ if page == "home":
 elif page == "explore":
     render_nav([("← Home", "home", "nav_home")])
 
-    q = st.text_input("Search", placeholder="Search a road, river, town, or county")
+    q = st.text_input("Search", placeholder="Search a road, river, town, or county",
+                      key="bridge_search")
+    components.html(
+        "<script>"
+        "const _fixSearch=()=>{const el=window.parent.document.querySelector("
+        "'.st-key-bridge_search input');if(el){el.setAttribute('spellcheck','false');"
+        "el.setAttribute('autocomplete','off');el.setAttribute('autocorrect','off');"
+        "el.setAttribute('autocapitalize','off');}};"
+        "_fixSearch();setTimeout(_fixSearch,300);setTimeout(_fixSearch,1000);"
+        "</script>",
+        height=0,
+    )
     pf = st.session_state.risk_filter
     p1, p2, p3 = st.columns(3, gap="medium")
     p1.button("All", type="primary" if pf == "all" else "secondary", width="stretch",
@@ -568,9 +592,10 @@ elif page == "explore":
                 paper_bgcolor="rgba(0,0,0,0)",
                 font=dict(color="#F5F5F7"),
                 hoverlabel=dict(
-                    bgcolor="rgba(16,20,27,0.88)",
+                    bgcolor="rgba(14,17,23,0.94)",
                     bordercolor="rgba(255,255,255,0.12)",
-                    font=dict(color="white"),
+                    font=dict(family="Inter", size=13, color="#F5F5F7"),
+                    align="left",
                 ),
                 uirevision="map",
             )
@@ -776,9 +801,9 @@ elif page == "guide":
         unsafe_allow_html=True,
     )
     st.button("Start Exploring", type="primary", on_click=go_to, args=("explore",))
-
-st.markdown(
-    '<div class="footer">myBridge &middot; Predictions from 42 years of inspections &middot; '
-    "Llama explains, myBridge predicts, a licensed engineer decides.</div>",
-    unsafe_allow_html=True,
-)
+    st.markdown(
+        '<div style="text-align:center;font-size:13px;color:#86868B;margin-top:48px;">'
+        "myBridge · Predictions from 42 years of inspections · Llama explains, myBridge predicts, "
+        "a licensed engineer decides.</div>",
+        unsafe_allow_html=True,
+    )
