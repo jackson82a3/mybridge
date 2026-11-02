@@ -629,16 +629,16 @@ h1 a, [data-testid="StyledLinkIconContainer"] { display: none !important; }
 st.markdown(
     """
 <style>
-/* HOME TILES - fixed small squares */
+/* HOME TILES - small rectangles */
 .st-key-home_tiles {
-  max-width: 620px !important;
+  max-width: 680px !important;
   margin: 10px auto 0 auto !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
 .st-key-home_tiles [data-testid="stHorizontalBlock"] {
-  gap: 18px !important;
+  gap: 16px !important;
   justify-content: center !important;
 }
 .st-key-home_tiles [data-testid="stColumn"] {
@@ -646,34 +646,34 @@ st.markdown(
   justify-content: center !important;
 }
 .st-key-home_tiles .stButton {
-  width: 168px !important;
-  max-width: 168px !important;
-  flex: 0 0 168px !important;
+  width: 200px !important;
+  max-width: 200px !important;
+  flex: 0 0 200px !important;
   display: flex !important;
   justify-content: center !important;
 }
 .stApp .st-key-home_tiles .stButton > button {
-  width: 168px !important;
-  min-width: 168px !important;
-  max-width: 168px !important;
-  height: 168px !important;
-  min-height: 168px !important;
-  max-height: 168px !important;
+  width: 200px !important;
+  min-width: 200px !important;
+  max-width: 200px !important;
+  height: 104px !important;
+  min-height: 104px !important;
+  max-height: 104px !important;
   aspect-ratio: auto !important;
-  border-radius: 22px !important;
-  padding: 16px !important;
+  border-radius: 18px !important;
+  padding: 14px 16px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   text-align: center !important;
   white-space: normal !important;
   line-height: 1.25 !important;
-  font-size: 17px !important;
+  font-size: 16px !important;
   font-weight: 600 !important;
   color: #F5F5F7 !important;
   background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.028)) !important;
   border: 1px solid rgba(255,255,255,0.09) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 34px rgba(0,0,0,0.28) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 26px rgba(0,0,0,0.26) !important;
   backdrop-filter: blur(18px) saturate(140%) !important;
   -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease !important;
@@ -681,26 +681,36 @@ st.markdown(
 .stApp .st-key-home_tiles .stButton > button p {
   text-align: center !important;
   margin: 0 !important;
+  white-space: normal !important;
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+}
+.stApp .st-key-home_tiles [data-testid="stMarkdownContainer"] {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: 118px !important;
+  margin: 0 auto !important;
 }
 .stApp .st-key-home_tiles .stButton > button:hover,
 .stApp .st-key-home_tiles .stButton > button:focus-visible {
-  transform: translateY(-3px) !important;
+  transform: translateY(-2px) !important;
   background: linear-gradient(135deg, rgba(212,175,55,0.14), rgba(255,255,255,0.04)) !important;
   border-color: rgba(212,175,55,0.55) !important;
   color: #FFFFFF !important;
   outline: none !important;
-  box-shadow: inset 0 1px 0 rgba(212,175,55,0.25), 0 0 0 1px rgba(212,175,55,0.18), 0 0 38px rgba(212,175,55,0.30), 0 20px 44px rgba(0,0,0,0.36) !important;
+  box-shadow: inset 0 1px 0 rgba(212,175,55,0.25), 0 0 0 1px rgba(212,175,55,0.18), 0 0 30px rgba(212,175,55,0.28), 0 16px 34px rgba(0,0,0,0.34) !important;
 }
 @media (max-width: 700px) {
   .stApp .st-key-home_tiles .stButton,
   .stApp .st-key-home_tiles .stButton > button {
-    width: 148px !important;
-    min-width: 148px !important;
-    max-width: 148px !important;
-    height: 148px !important;
-    min-height: 148px !important;
-    max-height: 148px !important;
-    font-size: 16px !important;
+    width: 168px !important;
+    min-width: 168px !important;
+    max-width: 168px !important;
+    height: 92px !important;
+    min-height: 92px !important;
+    max-height: 92px !important;
+    font-size: 15px !important;
   }
 }
 </style>
