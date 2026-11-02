@@ -530,45 +530,6 @@ section[data-testid="stFileUploaderDropzone"] {
 .flowpill { background:var(--glass); border:var(--glass-border); border-radius:980px;
   backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   padding:10px 18px; font-size:14px; font-weight:600; text-align:center; }
-.st-key-home_tiles .stButton { display:flex; justify-content:center; }
-.st-key-home_tiles .stButton > button {
-  width:min(100%, 260px) !important; aspect-ratio:1 / 1; height:auto !important; min-height:0 !important;
-  border-radius:22px !important; display:flex; align-items:center; justify-content:center;
-  text-align:center; white-space:normal; line-height:1.25; padding:20px;
-  font-size:20px; font-weight:600; color:#F5F5F7;
-  background:linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.028)) !important;
-  border:1px solid rgba(255,255,255,0.09) !important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 34px rgba(0,0,0,0.28) !important;
-  backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
-  margin:0 auto;
-  transition:transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease; }
-.st-key-home_tiles .stButton > button p { text-align:center; margin:0; }
-.st-key-home_tiles .stButton > button:hover {
-  transform:translateY(-3px);
-  background:linear-gradient(135deg, rgba(212,175,55,0.14), rgba(255,255,255,0.04)) !important;
-  border-color:rgba(212,175,55,0.55) !important;
-  color:#FFFFFF !important;
-  box-shadow:
-    inset 0 1px 0 rgba(212,175,55,0.25),
-    0 0 0 1px rgba(212,175,55,0.18),
-    0 0 38px rgba(212,175,55,0.30),
-    0 20px 44px rgba(0,0,0,0.36) !important; }
-.st-key-home_tiles .stButton > button:focus-visible {
-  outline:none !important;
-  transform:translateY(-3px);
-  background:linear-gradient(135deg, rgba(212,175,55,0.14), rgba(255,255,255,0.04)) !important;
-  border-color:rgba(212,175,55,0.55) !important;
-  color:#FFFFFF !important;
-  box-shadow:
-    inset 0 1px 0 rgba(212,175,55,0.25),
-    0 0 0 1px rgba(212,175,55,0.18),
-    0 0 38px rgba(212,175,55,0.30),
-    0 20px 44px rgba(0,0,0,0.36) !important; }
-@media (max-width: 700px) {
-  .st-key-home_tiles .stButton > button { font-size:18px; }
-  .st-key-home_tiles [data-testid="stHorizontalBlock"] { flex-direction:column !important; }
-  .st-key-home_tiles [data-testid="stColumn"] { width:100% !important; }
-}
 @keyframes draw { to { stroke-dashoffset:0; } }
 @keyframes glow { 0%,100% { filter:drop-shadow(0 0 0 rgba(212,175,55,0)); }
   50% { filter:drop-shadow(0 0 14px rgba(212,175,55,0.55)); } }
@@ -660,6 +621,88 @@ h1 a, [data-testid="StyledLinkIconContainer"] { display: none !important; }
 .st-key-next_step [data-testid="stButton"] button:hover {
   background: rgba(212,175,55,0.10) !important; border-color: rgba(212,175,55,0.45) !important;
   color: #FFFFFF !important; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+<style>
+/* HOME TILES - fixed small squares */
+.st-key-home_tiles {
+  max-width: 620px !important;
+  margin: 10px auto 0 auto !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.st-key-home_tiles [data-testid="stHorizontalBlock"] {
+  gap: 18px !important;
+  justify-content: center !important;
+}
+.st-key-home_tiles [data-testid="stColumn"] {
+  display: flex !important;
+  justify-content: center !important;
+}
+.st-key-home_tiles .stButton {
+  width: 168px !important;
+  max-width: 168px !important;
+  flex: 0 0 168px !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+.stApp .st-key-home_tiles .stButton > button {
+  width: 168px !important;
+  min-width: 168px !important;
+  max-width: 168px !important;
+  height: 168px !important;
+  min-height: 168px !important;
+  max-height: 168px !important;
+  aspect-ratio: auto !important;
+  border-radius: 22px !important;
+  padding: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: normal !important;
+  line-height: 1.25 !important;
+  font-size: 17px !important;
+  font-weight: 600 !important;
+  color: #F5F5F7 !important;
+  background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.028)) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 34px rgba(0,0,0,0.28) !important;
+  backdrop-filter: blur(18px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease !important;
+}
+.stApp .st-key-home_tiles .stButton > button p {
+  text-align: center !important;
+  margin: 0 !important;
+}
+.stApp .st-key-home_tiles .stButton > button:hover,
+.stApp .st-key-home_tiles .stButton > button:focus-visible {
+  transform: translateY(-3px) !important;
+  background: linear-gradient(135deg, rgba(212,175,55,0.14), rgba(255,255,255,0.04)) !important;
+  border-color: rgba(212,175,55,0.55) !important;
+  color: #FFFFFF !important;
+  outline: none !important;
+  box-shadow: inset 0 1px 0 rgba(212,175,55,0.25), 0 0 0 1px rgba(212,175,55,0.18), 0 0 38px rgba(212,175,55,0.30), 0 20px 44px rgba(0,0,0,0.36) !important;
+}
+@media (max-width: 700px) {
+  .stApp .st-key-home_tiles .stButton,
+  .stApp .st-key-home_tiles .stButton > button {
+    width: 148px !important;
+    min-width: 148px !important;
+    max-width: 148px !important;
+    height: 148px !important;
+    min-height: 148px !important;
+    max-height: 148px !important;
+    font-size: 16px !important;
+  }
+}
 </style>
 """,
     unsafe_allow_html=True,
