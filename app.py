@@ -334,20 +334,26 @@ html, body, [class*="css"], .stApp { font-family:'Inter',-apple-system,'SF Pro D
 .hero h1 { font-size:52px; font-weight:700; letter-spacing:-0.03em; margin:16px 0 32px;
   color:#F5F5F7; }
 svg[role="img"] { filter:drop-shadow(0 0 18px rgba(212,175,55,0.35)); }
-.st-key-top_bar { position:sticky; top:0; z-index:900; background:rgba(8,11,15,0.55);
-  backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
-  border-bottom:1px solid rgba(255,255,255,0.09); padding:8px 4px; }
+.st-key-top_bar, .st-key-top_bar [data-testid="stVerticalBlock"],
+.st-key-top_bar [data-testid="stHorizontalBlock"], .st-key-top_bar [data-testid="stColumn"] {
+  background:transparent !important; background-image:none !important;
+  border:none !important; box-shadow:none !important;
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
+.st-key-top_bar { position:relative !important; top:auto !important; z-index:auto !important;
+  padding:20px 4px 8px 4px !important; margin:0 !important; }
 .topbrand { text-align:center; color:#D4AF37; font-weight:700; letter-spacing:0.2em;
-  font-size:13px; padding-top:8px; text-transform:uppercase; }
-.st-key-top_bar div[data-testid="stButton"] button {
-  background:rgba(255,255,255,0.04) !important; backdrop-filter:blur(16px);
-  -webkit-backdrop-filter:blur(16px);
+  font-size:13px; padding-top:8px; text-transform:uppercase;
+  background:transparent; border:none; box-shadow:none; }
+.stApp .st-key-top_bar div[data-testid="stButton"] button {
+  background:rgba(255,255,255,0.04) !important;
+  backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
   border:1px solid rgba(255,255,255,0.08) !important; border-radius:980px !important;
-  padding:6px 14px !important; font-size:14px !important; color:#C7C7CC !important;
-  box-shadow:none !important; height:auto !important; font-weight:500 !important; }
-.st-key-top_bar div[data-testid="stButton"] button:hover { color:#fff !important;
-  border-color:rgba(255,255,255,0.25) !important; background:rgba(255,255,255,0.08) !important;
-  transform:translateY(-1px); }
+  min-height:36px !important; height:auto !important; width:auto !important;
+  padding:6px 16px !important; font-size:14px !important; color:#D8D8DC !important;
+  box-shadow:none !important; font-weight:500 !important; }
+.stApp .st-key-top_bar div[data-testid="stButton"] button:hover {
+  background:rgba(212,175,55,0.10) !important; border-color:rgba(212,175,55,0.35) !important;
+  color:#fff !important; transform:translateY(-1px); }
 h1 > a, h2 > a, h3 > a { display:none !important; }
 .mcard { background:var(--glass); border:var(--glass-border); border-radius:22px;
   box-shadow:var(--glass-shadow); backdrop-filter:blur(20px) saturate(140%);
