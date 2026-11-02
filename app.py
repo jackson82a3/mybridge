@@ -530,18 +530,42 @@ section[data-testid="stFileUploaderDropzone"] {
 .flowpill { background:var(--glass); border:var(--glass-border); border-radius:980px;
   backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   padding:10px 18px; font-size:14px; font-weight:600; text-align:center; }
-.st-key-home_tiles [data-testid="stButton"] button {
-  height:176px !important; text-align:left !important; white-space:pre-line !important;
-  align-items:flex-start !important; justify-content:flex-start !important;
-  background:linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.03)) !important;
-  border:1px solid rgba(255,255,255,0.09) !important; border-radius:20px !important;
-  padding:20px !important; color:#F5F5F7 !important; font-size:15px !important;
-  line-height:1.5 !important; box-shadow:0 20px 50px rgba(0,0,0,0.35) !important;
-  transition:border-color 0.25s ease, transform 0.25s ease !important; }
-.st-key-home_tiles [data-testid="stButton"] button:hover {
-  border-color:rgba(212,175,55,0.40) !important; transform:translateY(-2px); color:#FFFFFF !important; }
-.st-key-home_tiles [data-testid="stButton"] button p { text-align:left !important; white-space:pre-line !important; }
+.st-key-home_tiles .stButton { display:flex; justify-content:center; }
+.st-key-home_tiles .stButton > button {
+  width:min(100%, 260px) !important; aspect-ratio:1 / 1; height:auto !important; min-height:0 !important;
+  border-radius:22px !important; display:flex; align-items:center; justify-content:center;
+  text-align:center; white-space:normal; line-height:1.25; padding:20px;
+  font-size:20px; font-weight:600; color:#F5F5F7;
+  background:linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.028)) !important;
+  border:1px solid rgba(255,255,255,0.09) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.08), 0 14px 34px rgba(0,0,0,0.28) !important;
+  backdrop-filter:blur(18px) saturate(140%); -webkit-backdrop-filter:blur(18px) saturate(140%);
+  margin:0 auto;
+  transition:transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease; }
+.st-key-home_tiles .stButton > button p { text-align:center; margin:0; }
+.st-key-home_tiles .stButton > button:hover {
+  transform:translateY(-3px);
+  background:linear-gradient(135deg, rgba(212,175,55,0.14), rgba(255,255,255,0.04)) !important;
+  border-color:rgba(212,175,55,0.55) !important;
+  color:#FFFFFF !important;
+  box-shadow:
+    inset 0 1px 0 rgba(212,175,55,0.25),
+    0 0 0 1px rgba(212,175,55,0.18),
+    0 0 38px rgba(212,175,55,0.30),
+    0 20px 44px rgba(0,0,0,0.36) !important; }
+.st-key-home_tiles .stButton > button:focus-visible {
+  outline:none !important;
+  transform:translateY(-3px);
+  background:linear-gradient(135deg, rgba(212,175,55,0.14), rgba(255,255,255,0.04)) !important;
+  border-color:rgba(212,175,55,0.55) !important;
+  color:#FFFFFF !important;
+  box-shadow:
+    inset 0 1px 0 rgba(212,175,55,0.25),
+    0 0 0 1px rgba(212,175,55,0.18),
+    0 0 38px rgba(212,175,55,0.30),
+    0 20px 44px rgba(0,0,0,0.36) !important; }
 @media (max-width: 700px) {
+  .st-key-home_tiles .stButton > button { font-size:18px; }
   .st-key-home_tiles [data-testid="stHorizontalBlock"] { flex-direction:column !important; }
   .st-key-home_tiles [data-testid="stColumn"] { width:100% !important; }
 }
@@ -682,11 +706,11 @@ if page == "home":
     )
     with st.container(key="home_tiles"):
         t1, t2, t3 = st.columns(3, gap="large")
-        t1.button("◎\n\nExplore\nSearch and understand any bridge.",
+        t1.button("Explore",
                   key="tile_explore", width="stretch", on_click=go_to, args=("explore",))
-        t2.button("◈\n\nPlan & Estimate\nBuild a plan with cost ranges.",
+        t2.button("Plan & Estimate",
                   key="tile_plan", width="stretch", on_click=go_to, args=("plan",))
-        t3.button("✓\n\nEngineer-in-the-Loop\nVerify and approve bridges.",
+        t3.button("Engineer-in-the-Loop",
                   key="tile_engineer", width="stretch", on_click=go_to, args=("engineer",))
     with st.container(key="ask_mybridge"):
         st.markdown(
