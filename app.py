@@ -854,16 +854,16 @@ h1 a, [data-testid="StyledLinkIconContainer"] { display: none !important; }
 st.markdown(
     """
 <style>
-/* HOME TILES - small rectangles */
+/* HOME TILES - smaller rectangles */
 .st-key-home_tiles {
-  max-width: 680px !important;
-  margin: 10px auto 0 auto !important;
+  max-width: 560px !important;
+  margin: 8px auto 0 auto !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
 .st-key-home_tiles [data-testid="stHorizontalBlock"] {
-  gap: 16px !important;
+  gap: 12px !important;
   justify-content: center !important;
 }
 .st-key-home_tiles [data-testid="stColumn"] {
@@ -871,71 +871,55 @@ st.markdown(
   justify-content: center !important;
 }
 .st-key-home_tiles .stButton {
-  width: 200px !important;
-  max-width: 200px !important;
-  flex: 0 0 200px !important;
+  width: 168px !important;
+  max-width: 168px !important;
+  flex: 0 0 168px !important;
   display: flex !important;
   justify-content: center !important;
 }
 .stApp .st-key-home_tiles .stButton > button {
-  width: 200px !important;
-  min-width: 200px !important;
-  max-width: 200px !important;
-  height: 104px !important;
-  min-height: 104px !important;
-  max-height: 104px !important;
-  aspect-ratio: auto !important;
-  border-radius: 18px !important;
-  padding: 14px 16px !important;
+  width: 168px !important;
+  min-width: 168px !important;
+  max-width: 168px !important;
+  height: 76px !important;
+  min-height: 76px !important;
+  max-height: 76px !important;
+  border-radius: 16px !important;
+  padding: 10px 12px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   text-align: center !important;
   white-space: normal !important;
-  line-height: 1.25 !important;
-  font-size: 16px !important;
+  line-height: 1.2 !important;
+  font-size: 15px !important;
   font-weight: 600 !important;
   color: #F5F5F7 !important;
   background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.028)) !important;
   border: 1px solid rgba(255,255,255,0.09) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 26px rgba(0,0,0,0.26) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 20px rgba(0,0,0,0.24) !important;
   backdrop-filter: blur(18px) saturate(140%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(140%) !important;
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease !important;
 }
 .stApp .st-key-home_tiles .stButton > button p {
   text-align: center !important;
   margin: 0 !important;
-  white-space: normal !important;
-  font-size: 16px !important;
-  line-height: 1.25 !important;
 }
-.stApp .st-key-home_tiles [data-testid="stMarkdownContainer"] {
-  white-space: normal !important;
-  overflow: visible !important;
-  text-overflow: clip !important;
-  max-width: 118px !important;
-  margin: 0 auto !important;
-}
-.stApp .st-key-home_tiles .stButton > button:hover,
-.stApp .st-key-home_tiles .stButton > button:focus-visible {
+.stApp .st-key-home_tiles .stButton > button:hover {
   transform: translateY(-2px) !important;
-  background: linear-gradient(135deg, rgba(230,223,206,0.13), rgba(255,255,255,0.035)) !important;
   border-color: rgba(230,223,206,0.55) !important;
-  color: #FFFFFF !important;
-  outline: none !important;
-  box-shadow: inset 0 1px 0 rgba(230,223,206,0.25), 0 0 0 1px rgba(230,223,206,0.18), 0 0 30px rgba(230,223,206,0.28), 0 16px 34px rgba(0,0,0,0.34) !important;
+  box-shadow: 0 0 24px rgba(230,223,206,0.24), 0 12px 26px rgba(0,0,0,0.30) !important;
 }
 @media (max-width: 700px) {
-  .stApp .st-key-home_tiles .stButton,
-  .stApp .st-key-home_tiles .stButton > button {
-    width: 168px !important;
-    min-width: 168px !important;
-    max-width: 168px !important;
-    height: 92px !important;
-    min-height: 92px !important;
-    max-height: 92px !important;
-    font-size: 15px !important;
+  .st-key-home_tiles .stButton,
+  .stApp .stApp .st-key-home_tiles .stButton > button {
+    width: 144px !important;
+    min-width: 144px !important;
+    max-width: 144px !important;
+    height: 68px !important;
+    min-height: 68px !important;
+    max-height: 68px !important;
+    font-size: 14px !important;
   }
 }
 </style>
@@ -995,7 +979,7 @@ if page == "home":
         t1, t2, t3 = st.columns(3, gap="large")
         t1.button("Explore",
                   key="tile_explore", width="stretch", on_click=go_to, args=("explore",))
-        t2.button("$ Plan & Estimate",
+        t2.button("Plan & Estimate",
                   key="tile_plan", width="stretch", on_click=go_to, args=("plan",))
         t3.button("Engineer-in-the-Loop",
                   key="tile_engineer", width="stretch", on_click=go_to, args=("engineer",))
@@ -1290,7 +1274,7 @@ elif page == "highrisk":
 # ================= PLAN & ESTIMATE =================
 elif page == "plan":
     render_nav([("← Home", "home", "nav_home"), ("← Explore", "explore", "nav_explore")])
-    st.markdown("## $ Plan & Estimate")
+    st.markdown("## Plan & Estimate")
     with st.container(border=True):
         budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM/yr", key="plan_budget")
         horizon = st.slider("Plan years", 1, 10, 5, 1, key="plan_horizon")
