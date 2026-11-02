@@ -292,16 +292,16 @@ def show_more():
     st.session_state.list_limit += 10
 
 
-def render_top_bar(buttons):
-    with st.container(key="top_bar"):
-        cols = st.columns([0.15, 0.22, 0.43, 0.20], vertical_alignment="center")
-        for i, (label, target) in enumerate(buttons[:2]):
-            cols[i].button(label, on_click=go_to, args=(target,))
-        cols[3].markdown(
-            '<div style="text-align:right;color:#D4AF37;letter-spacing:0.32em;'
-            'font-weight:700;font-size:14px;">MYBRIDGE</div>',
-            unsafe_allow_html=True,
-        )
+def render_nav(items):
+    # items = list of (label, target_page, key_name)
+    cols = st.columns([1.3, 2.0, 4.7, 2.0], vertical_alignment="center")
+    for col, (label, target, key_name) in zip(cols, items):
+        with col:
+            if st.button(label, key=key_name, use_container_width=False):
+                st.session_state.page = target
+                st.rerun()
+    with cols[-1]:
+        st.markdown('<div class="brand-mark">MYBRIDGE</div>', unsafe_allow_html=True)
 
 
 def selected_row():
@@ -437,43 +437,21 @@ section[data-testid="stFileUploaderDropzone"] {
 st.markdown(
     """
 <style>
-/* TOP BAR RESET - must be last */
-.st-key-top_bar, .st-key-top_bar *,
-.st-key-top_bar [data-testid="stVerticalBlockBorderWrapper"],
-.st-key-top_bar [data-testid="stVerticalBlockBorderWrapper"] > div,
-.st-key-top_bar [data-testid="stVerticalBlock"],
-.st-key-top_bar [data-testid="stHorizontalBlock"],
-.st-key-top_bar [data-testid="stLayoutWrapper"] {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  position: relative !important;
-}
-.st-key-top_bar [data-testid="stVerticalBlockBorderWrapper"] { padding: 0 !important; }
+[data-testid="stHeader"], [data-testid="stToolbar"] { background: transparent !important; box-shadow: none !important; }
+.block-container, [data-testid="stMain"], [data-testid="stAppViewContainer"] { background: transparent !important; }
 
-/* Back button - content width only, not column width */
-.st-key-top_bar .stButton { width: fit-content !important; }
-.st-key-top_bar .stButton > button {
-  width: auto !important;
-  min-height: 0 !important;
-  height: auto !important;
-  padding: 7px 16px !important;
-  font-size: 14px !important;
-  border-radius: 980px !important;
+.brand-mark { text-align: right; color: #D4AF37; letter-spacing: 0.32em; font-weight: 700; font-size: 14px; padding-top: 6px; background: transparent; }
+
+.st-key-nav_home button, .st-key-nav_explore button {
+  width: auto !important; min-width: 0 !important; height: auto !important; min-height: 0 !important;
+  padding: 7px 16px !important; border-radius: 980px !important;
   background: rgba(255,255,255,0.04) !important;
   border: 1px solid rgba(255,255,255,0.09) !important;
-  color: #D8D8DC !important;
-  box-shadow: none !important;
+  color: #D8D8DC !important; font-size: 14px !important; font-weight: 400 !important;
+  box-shadow: none !important; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
-.st-key-top_bar .stButton > button:hover {
-  background: rgba(212,175,55,0.10) !important;
-  border-color: rgba(212,175,55,0.35) !important;
-  color: #FFFFFF !important;
+.st-key-nav_home button:hover, .st-key-nav_explore button:hover {
+  background: rgba(212,175,55,0.10) !important; border-color: rgba(212,175,55,0.35) !important; color: #FFFFFF !important;
 }
 </style>
 """,
@@ -519,7 +497,7 @@ if page == "home":
 
 # ================= EXPLORE =================
 elif page == "explore":
-    render_top_bar([("← Home", "home")])
+    render_nav([("← Home", "home", "nav_home")])
 
     q = st.text_input("Search", placeholder="Search a road, river, town, or county")
     pf = st.session_state.risk_filter
@@ -661,7 +639,7 @@ elif page == "explore":
 
 # ================= PLANNING & BUDGET =================
 elif page == "plan":
-    render_top_bar([("← Home", "home"), ("← Explore Bridges", "explore")])
+    render_nav([("← Home", "home", "nav_home"), ("← Explore Bridges", "explore", "nav_explore")])
     st.markdown("## Planning & Budget")
     with st.container(border=True):
         budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM", key="plan_budget")
@@ -689,7 +667,7 @@ elif page == "plan":
 
 # ================= ENGINEER =================
 elif page == "engineer":
-    render_top_bar([("← Home", "home"), ("← Explore Bridges", "explore")])
+    render_nav([("← Home", "home", "nav_home"), ("← Explore Bridges", "explore", "nav_explore")])
     st.markdown("## Engineer Check")
     st.markdown('<div class="caption">myBridge suggests. You confirm.</div>', unsafe_allow_html=True)
 
@@ -766,7 +744,7 @@ elif page == "engineer":
 
 # ================= GUIDE =================
 elif page == "guide":
-    render_top_bar([("← Home", "home")])
+    render_nav([("← Home", "home", "nav_home")])
     st.markdown("## How to use myBridge")
     steps = [
         ("1", "Find", "Search any road, town, river, or county."),
