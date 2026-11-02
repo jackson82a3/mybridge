@@ -13,6 +13,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from agent_tools import answer_question
+import finance_model as fm
 
 st.set_page_config(page_title="myBridge", layout="wide")
 
@@ -329,6 +330,24 @@ def _ask_view(sid):
     st.session_state.page = "explore"
 
 
+def _fmt_money(v):
+    v = float(v)
+    return f"${v / 1_000_000:,.1f}M" if abs(v) >= 1_000_000 else f"${v:,.0f}"
+
+
+def _focus_plan(sid):
+    st.session_state.selected_bridge = sid
+    st.session_state.focus_bridge = sid
+    st.session_state.page = "plan"
+
+
+def _send_shortlist(ids):
+    for sid in ids:
+        if sid not in st.session_state.review_queue:
+            st.session_state.review_queue.append(sid)
+    st.session_state.page = "engineer"
+
+
 def _ask_open_plan(budget_m, horizon, strategy):
     st.session_state.plan_budget = int(min(100, max(10, round(budget_m / 5) * 5)))
     st.session_state.plan_horizon = int(horizon)
@@ -462,20 +481,16 @@ section[data-testid="stFileUploaderDropzone"] {
 .flowpill { background:var(--glass); border:var(--glass-border); border-radius:980px;
   backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
   padding:10px 18px; font-size:14px; font-weight:600; text-align:center; }
-.st-key-home_actions div[data-testid="stButton"] button,
-.st-key-home_actions div[data-testid="stButton"] button[kind="primary"],
-.st-key-home_actions div[data-testid="stButton"] button[kind="secondary"] {
-  background:rgba(255,255,255,0.045) !important; backdrop-filter:blur(20px) saturate(140%);
-  -webkit-backdrop-filter:blur(20px) saturate(140%);
-  border:1px solid rgba(255,255,255,0.12) !important; color:#F5F5F7 !important;
-  border-radius:980px !important; height:54px !important; font-weight:500 !important;
-  box-shadow:none !important; }
-.st-key-home_actions div[data-testid="stButton"] button:hover {
-  background:rgba(212,175,55,0.12) !important; border-color:rgba(212,175,55,0.45) !important;
-  color:#fff !important; transform:translateY(-1px); }
+.st-key-nav_card_explore, .st-key-nav_card_plan, .st-key-nav_card_engineer {
+  background:linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.03));
+  border:1px solid rgba(255,255,255,0.09); border-radius:20px; padding:18px;
+  min-height:112px; height:100%;
+  transition:border-color 0.25s ease, transform 0.25s ease; }
+.st-key-nav_card_explore:hover, .st-key-nav_card_plan:hover, .st-key-nav_card_engineer:hover {
+  border-color:rgba(212,175,55,0.40); transform:translateY(-2px); }
 @media (max-width: 700px) {
-  .st-key-home_actions [data-testid="stHorizontalBlock"] { flex-direction:column !important; }
-  .st-key-home_actions [data-testid="stColumn"] { width:100% !important; }
+  .st-key-home_nav [data-testid="stHorizontalBlock"] { flex-direction:column !important; }
+  .st-key-home_nav [data-testid="stColumn"] { width:100% !important; }
 }
 @keyframes draw { to { stroke-dashoffset:0; } }
 @keyframes glow { 0%,100% { filter:drop-shadow(0 0 0 rgba(212,175,55,0)); }
@@ -549,17 +564,34 @@ st.markdown(
   background: rgba(255,255,255,0.08) !important; color: #FFFFFF !important; border: 1px solid rgba(255,255,255,0.14) !important; }
 
 .st-key-ask_mybridge { max-width: 760px; margin: 30px auto 0 !important; }
-.st-key-ask_mybridge .st-key-ask_chip_0[data-testid="stButton"] > button,
-.st-key-ask_mybridge .st-key-ask_chip_1[data-testid="stButton"] > button,
-.st-key-ask_mybridge .st-key-ask_chip_2[data-testid="stButton"] > button {
-  font-size: 12px !important; font-weight: 400 !important; padding: 8px 12px !important;
-  min-height: 0 !important; height: auto !important; line-height: 1.35 !important;
-  background: rgba(255,255,255,0.04) !important; border: 1px solid rgba(255,255,255,0.09) !important;
-  border-radius: 980px !important; color: #C7C7CC !important; box-shadow: none !important; }
-.st-key-ask_mybridge .st-key-ask_chip_0[data-testid="stButton"] > button:hover,
-.st-key-ask_mybridge .st-key-ask_chip_1[data-testid="stButton"] > button:hover,
-.st-key-ask_mybridge .st-key-ask_chip_2[data-testid="stButton"] > button:hover {
-  background: rgba(212,175,55,0.10) !important; border-color: rgba(212,175,55,0.35) !important; color: #FFFFFF !important; }
+.st-key-ask_mybridge div[data-testid="stButton"] button[kind="primary"] { height: 44px !important; }
+h1 a, [data-testid="StyledLinkIconContainer"] { display: none !important; }
+.st-key-nav_card_explore [data-testid="stButton"] button,
+.st-key-nav_card_plan [data-testid="stButton"] button,
+.st-key-nav_card_engineer [data-testid="stButton"] button {
+  background: transparent !important; border: none !important; color: #D4AF37 !important;
+  padding: 4px 0 !important; font-size: 14px !important; font-weight: 600 !important;
+  box-shadow: none !important; height: auto !important; min-height: 0 !important; }
+.st-key-nav_card_explore [data-testid="stButton"] button:hover,
+.st-key-nav_card_plan [data-testid="stButton"] button:hover,
+.st-key-nav_card_engineer [data-testid="stButton"] button:hover { color: #FFFFFF !important; }
+.st-key-prompt_chips [data-testid="stButton"] button {
+  height: auto !important; min-height: 30px !important; padding: 5px 12px !important;
+  font-size: 12.5px !important; font-weight: 400 !important; color: #A1A1AA !important;
+  background: transparent !important; border: 1px solid rgba(255,255,255,0.07) !important;
+  border-radius: 980px !important; box-shadow: none !important;
+  white-space: normal !important; line-height: 1.3 !important; }
+.st-key-prompt_chips [data-testid="stButton"] button:hover {
+  color: #FFFFFF !important; border-color: rgba(212,175,55,0.35) !important;
+  background: rgba(212,175,55,0.08) !important; }
+.st-key-next_step [data-testid="stButton"] button {
+  width: 100% !important; height: 52px !important; background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(212,175,55,0.30) !important; border-radius: 16px !important;
+  color: #D4AF37 !important; font-size: 15px !important; font-weight: 600 !important;
+  box-shadow: none !important; }
+.st-key-next_step [data-testid="stButton"] button:hover {
+  background: rgba(212,175,55,0.10) !important; border-color: rgba(212,175,55,0.45) !important;
+  color: #FFFFFF !important; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -604,11 +636,35 @@ if page == "home":
         '<div class="hero"><h1>Every bridge. Know when it needs you.</h1></div>',
         unsafe_allow_html=True,
     )
-    with st.container(key="home_actions"):
-        b1, b2, b3 = st.columns(3, gap="large")
-        b1.button("Explore Bridges", width="stretch", on_click=go_to, args=("explore",))
-        b2.button("Planning & Budget", width="stretch", on_click=go_to, args=("plan",))
-        b3.button("Engineer Check", width="stretch", on_click=go_to, args=("engineer",))
+    with st.container(key="home_nav"):
+        n1, n2, n3 = st.columns(3, gap="large")
+        with n1:
+            with st.container(key="nav_card_explore"):
+                st.markdown(
+                    '<div style="color:#D4AF37;font-size:18px;">⌖</div>'
+                    '<div style="font-size:17px;font-weight:600;margin:6px 0 4px;">Explore Bridges</div>'
+                    '<div style="font-size:13px;color:#9A9AA0;line-height:1.45;">Search and understand any bridge.</div>',
+                    unsafe_allow_html=True,
+                )
+                st.button("Open ->", key="nav_open_explore", on_click=go_to, args=("explore",))
+        with n2:
+            with st.container(key="nav_card_plan"):
+                st.markdown(
+                    '<div style="color:#D4AF37;font-size:18px;">◈</div>'
+                    '<div style="font-size:17px;font-weight:600;margin:6px 0 4px;">Planning &amp; Budget</div>'
+                    '<div style="font-size:13px;color:#9A9AA0;line-height:1.45;">Build a funded plan with cost ranges.</div>',
+                    unsafe_allow_html=True,
+                )
+                st.button("Open ->", key="nav_open_plan", on_click=go_to, args=("plan",))
+        with n3:
+            with st.container(key="nav_card_engineer"):
+                st.markdown(
+                    '<div style="color:#D4AF37;font-size:18px;">✓</div>'
+                    '<div style="font-size:17px;font-weight:600;margin:6px 0 4px;">Engineer Check</div>'
+                    '<div style="font-size:13px;color:#9A9AA0;line-height:1.45;">Verify load ratings and approve.</div>',
+                    unsafe_allow_html=True,
+                )
+                st.button("Open ->", key="nav_open_engineer", on_click=go_to, args=("engineer",))
     with st.container(key="ask_mybridge"):
         st.markdown(
             '<div style="color:#D4AF37;font-size:13px;font-weight:700;'
@@ -623,15 +679,20 @@ if page == "home":
             label_visibility="collapsed",
         )
         a_btn.button("Ask", type="primary", width="stretch", on_click=_ask_submit)
-        chips = [
-            "Bridges needing work now in Chisago County",
-            "Busy bridges over a river",
-            "What could $40M a year fix first?",
-        ]
-        chip_cols = st.columns(3, gap="small")
-        for i, (col, chip) in enumerate(zip(chip_cols, chips)):
-            col.button(chip, key=f"ask_chip_{i}", width="stretch",
-                       on_click=_ask_chip, args=(chip,))
+        with st.container(key="prompt_chips"):
+            st.markdown(
+                '<div style="font-size:12px;color:#86868B;margin:2px 0 8px;">Try asking:</div>',
+                unsafe_allow_html=True,
+            )
+            chips = [
+                "Bridges needing work in Chisago County",
+                "Busy bridges over a river",
+                "Plan with $40M a year",
+            ]
+            chip_cols = st.columns([1.5, 1.05, 0.95], gap="small")
+            for i, (col, chip) in enumerate(zip(chip_cols, chips)):
+                col.button("✦ " + chip, key=f"ask_chip_{i}", width="stretch",
+                           on_click=_ask_chip, args=(chip,))
     if st.session_state.ask_pending:
         st.session_state.ask_pending = False
         _run_ask()
@@ -802,6 +863,9 @@ elif page == "explore":
                     pairs.append((col, "" if pd.isna(v) else str(v)))
             st.dataframe(pd.DataFrame(pairs, columns=["Field", "Value"]),
                          hide_index=True, width="stretch")
+        with st.container(key="next_step"):
+            st.button("See what this could cost ->", width="stretch",
+                      on_click=_focus_plan, args=(sid,))
 
 # ================= PLANNING & BUDGET =================
 elif page == "plan":
@@ -809,26 +873,92 @@ elif page == "plan":
     st.markdown("## Planning & Budget")
     with st.container(border=True):
         budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM", key="plan_budget")
-        cand = df[(df["IS_ALREADY_POOR"] == 1) | (df["P_POOR_5YR"] > 0.3)].copy()
-        med_area = cand["deck_area_sqft"].median()
-        rates = {"Replacement - Engineer Review": 700, "Rehabilitation - Engineer Review": 350}
-        cand["est_cost"] = cand["deck_area_sqft"].fillna(med_area) * cand["RECOMMENDED_ACTION"].map(rates).fillna(75)
-        cand = cand.sort_values("P_POOR_5YR", ascending=False)
-        funded = cand[cand["est_cost"].cumsum() <= budget * 5 * 1_000_000]
+        horizon = st.slider("Plan years", 1, 10, 5, 1, key="plan_horizon")
+        strategy = st.selectbox(
+            "Strategy",
+            ["worst_first", "best_value", "fix_fair_first"],
+            format_func=lambda s: {"worst_first": "Worst first", "best_value": "Best value",
+                                   "fix_fair_first": "Fair bridges first"}[s],
+            key="plan_strategy",
+        )
+        with st.expander("Assumptions"):
+            esc = st.number_input("Escalation (% per year)", 0.0, 10.0, 4.0, 0.5, key="plan_esc")
+            cont = st.number_input("Contingency (%)", 0.0, 40.0, 20.0, 1.0, key="plan_cont")
+            regional = st.number_input("Regional multiplier", 0.5, 2.0, 1.0, 0.05, key="plan_regional")
+        assumptions = {"escalation_rate": esc / 100.0, "contingency_pct": cont / 100.0,
+                       "regional_multiplier": regional}
+        sig = (budget, horizon, strategy, esc, cont, regional)
+        if st.session_state.get("plan_sig") != sig:
+            st.session_state.plan_sig = sig
+            st.session_state.plan_result = fm.build_plan(
+                df, budget * 1_000_000, horizon, strategy, assumptions)
+        plan = st.session_state.plan_result
+        funded = plan["funded"]
         st.write(
-            f"With ${budget}M a year for the next 5 years, we could start with the "
+            f"With ${budget}M a year for the next {horizon} years, we could start with the "
             f"{len(funded)} bridges that need it most."
         )
-        st.write("The rest stay on watch and move up as work is finished.")
-    for _, fr in funded.head(10).iterrows():
+        st.write(
+            f"Early planning range in total: {_fmt_money(plan['total_low'])} to "
+            f"{_fmt_money(plan['total_high'])}. The rest stay on watch and move up as work is finished."
+        )
+        fig = go.Figure(go.Bar(
+            x=[a["year"] for a in plan["annual_costs"]],
+            y=[a["spent"] / 1_000_000 for a in plan["annual_costs"]],
+            marker=dict(color="rgba(212,175,55,0.75)"),
+            hovertemplate="%{x}: $%{y:.1f}M<extra></extra>",
+        ))
+        fig.update_layout(
+            height=260, margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#F5F5F7"),
+            xaxis=dict(title="Year", showgrid=False),
+            yaxis=dict(title="$M spent", gridcolor="rgba(255,255,255,0.08)"),
+        )
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    with st.container(border=True):
+        st.markdown("**How these estimates are built**")
+        st.markdown(
+            '<div class="caption">From deck size, what the bridge crosses, traffic, complexity, '
+            "and build year. Early planning range: about -20% to +35%. "
+            "An engineer confirms final cost.</div>",
+            unsafe_allow_html=True,
+        )
+    by_id = {r["stable_id"]: r for _, r in df.iterrows()}
+    shortlist = []
+    for f in funded[:10]:
+        fr = by_id[f["stable_id"]]
+        shortlist.append(f["stable_id"])
         st.button(
-            f"{bridge_name(fr)} - {fr['status_title']} · {clean_county(fr['county_name'])}",
-            key=f"fund_{fr['stable_id']}",
+            f"{bridge_name(fr)} - {fr['status_title']} · {clean_county(fr['county_name'])}"
+            f" · {_fmt_money(f['likely'])} in {f['target_year']}",
+            key=f"fund_{f['stable_id']}",
             width="stretch",
             on_click=open_bridge,
-            args=(fr["stable_id"],),
+            args=(f["stable_id"],),
         )
-    st.button("See these bridges ->", type="primary", on_click=go_to, args=("explore",))
+        est = fm.estimate_cost(fr, action=f["action"], target_year=f["target_year"],
+                               assumptions=assumptions)
+        comp = est["components"]
+        adj = " · ".join(
+            f"{v['label']} {(v['value'] - 1) * 100:+.0f}%" for v in est["factors"].values())
+        with st.expander("How this estimate is built"):
+            st.markdown(
+                f"Deck size: {est['deck_area_sqft']:,.0f} sq ft · {est['action']} at "
+                f"${est['base_rate_per_sqft']:,.0f} per sq ft  \n"
+                f"Base cost: {_fmt_money(est['deck_area_sqft'] * est['base_rate_per_sqft'])}  \n"
+                f"Adjustments: {adj}  \n"
+                f"Construction: {_fmt_money(comp['construction'])}  \n"
+                f"Design: {_fmt_money(comp['design'])} · Construction inspection: "
+                f"{_fmt_money(comp['construction_inspection'])} · Contingency: "
+                f"{_fmt_money(comp['contingency'])} · Escalation to {est['target_year']}: "
+                f"{_fmt_money(comp['escalation'])}  \n"
+                f"**Likely {_fmt_money(est['likely'])}** · Low {_fmt_money(est['low'])} · "
+                f"High {_fmt_money(est['high'])}"
+            )
+    with st.container(key="next_step"):
+        st.button("Send shortlist for Engineer Check ->", width="stretch",
+                  on_click=_send_shortlist, args=(shortlist,))
     st.caption("Early planning estimates only. An engineer confirms each bridge before money is committed.")
 
 # ================= ENGINEER =================
@@ -910,6 +1040,7 @@ elif page == "engineer":
             })
             st.download_button("Download approved list (CSV)", dl.to_csv(index=False).encode(),
                                "mybridge_approved.csv", "text/csv")
+    st.button("Planning & Budget ->", type="tertiary", on_click=go_to, args=("plan",))
 
 # ================= GUIDE =================
 elif page == "guide":

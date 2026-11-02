@@ -319,7 +319,7 @@ def _keyword_parse(question, df):
     if "how many" in q or "summary" in q or "overview of" in q:
         return {"tool": "get_network_summary", "params": {"county": county}}
     status = None
-    if "major work now" in q or "repair now" in q or "needing work now" in q or "need work now" in q:
+    if "major work now" in q or "repair now" in q or "needing work" in q or "need work" in q or "needs work" in q:
         status = "repair_now"
     elif "repair soon" in q or "plan soon" in q:
         status = "repair_soon"

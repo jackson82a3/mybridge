@@ -19,6 +19,7 @@ DEFAULT_ASSUMPTIONS = {
     "low_factor": 0.85,        # low end of the planning range, share of likely
     "high_factor": 1.30,       # high end of the planning range, share of likely
     "default_deck_area_sqft": 5000.0,
+    "regional_multiplier": 1.0,  # regional pricing adjustment
     # Expected service life added by each action, in years (best-value scoring).
     "life_added": {"Replacement": 50.0, "Rehabilitation": 25.0, "Preservation": 10.0},
 }
@@ -136,8 +137,9 @@ def estimate_cost(row, action=None, target_year=None, assumptions=None):
         row.get("material") if row is not None else "",
     )
     sf, sf_label = _size_factor(area)
+    rm = float(a.get("regional_multiplier", 1.0))
 
-    construction = area * rate * cf * tf * xf * sf
+    construction = area * rate * cf * tf * xf * sf * rm
     design = construction * float(a["design_pct"])
     inspection = construction * float(a["inspection_pct"])
     subtotal = construction + design + inspection
@@ -157,6 +159,7 @@ def estimate_cost(row, action=None, target_year=None, assumptions=None):
             "traffic": {"value": tf, "label": tf_label},
             "complexity": {"value": xf, "label": xf_label},
             "size": {"value": sf, "label": sf_label},
+            "regional": {"value": rm, "label": "regional pricing"},
         },
         "components": {
             "construction": round(construction),
