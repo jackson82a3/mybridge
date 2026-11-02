@@ -292,14 +292,16 @@ def show_more():
     st.session_state.list_limit += 10
 
 
-def render_back(*pairs):
+def render_top_bar(buttons):
     with st.container(key="top_bar"):
-        left, right = st.columns([3, 1])
-        with left:
-            cols = st.columns(len(pairs))
-            for col, (label, target) in zip(cols, pairs):
-                col.button(label, on_click=go_to, args=(target,))
-        right.markdown('<div class="topbrand">myBridge</div>', unsafe_allow_html=True)
+        cols = st.columns([0.15, 0.22, 0.43, 0.20], vertical_alignment="center")
+        for i, (label, target) in enumerate(buttons[:2]):
+            cols[i].button(label, on_click=go_to, args=(target,))
+        cols[3].markdown(
+            '<div style="text-align:right;color:#D4AF37;letter-spacing:0.32em;'
+            'font-weight:700;font-size:14px;">MYBRIDGE</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def selected_row():
@@ -334,26 +336,6 @@ html, body, [class*="css"], .stApp { font-family:'Inter',-apple-system,'SF Pro D
 .hero h1 { font-size:52px; font-weight:700; letter-spacing:-0.03em; margin:16px 0 32px;
   color:#F5F5F7; }
 svg[role="img"] { filter:drop-shadow(0 0 18px rgba(212,175,55,0.35)); }
-.st-key-top_bar, .st-key-top_bar [data-testid="stVerticalBlock"],
-.st-key-top_bar [data-testid="stHorizontalBlock"], .st-key-top_bar [data-testid="stColumn"] {
-  background:transparent !important; background-image:none !important;
-  border:none !important; box-shadow:none !important;
-  backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
-.st-key-top_bar { position:relative !important; top:auto !important; z-index:auto !important;
-  padding:20px 4px 8px 4px !important; margin:0 !important; }
-.topbrand { text-align:center; color:#D4AF37; font-weight:700; letter-spacing:0.2em;
-  font-size:13px; padding-top:8px; text-transform:uppercase;
-  background:transparent; border:none; box-shadow:none; }
-.stApp .st-key-top_bar div[data-testid="stButton"] button {
-  background:rgba(255,255,255,0.04) !important;
-  backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
-  border:1px solid rgba(255,255,255,0.08) !important; border-radius:980px !important;
-  min-height:36px !important; height:auto !important; width:auto !important;
-  padding:6px 16px !important; font-size:14px !important; color:#D8D8DC !important;
-  box-shadow:none !important; font-weight:500 !important; }
-.stApp .st-key-top_bar div[data-testid="stButton"] button:hover {
-  background:rgba(212,175,55,0.10) !important; border-color:rgba(212,175,55,0.35) !important;
-  color:#fff !important; transform:translateY(-1px); }
 h1 > a, h2 > a, h3 > a { display:none !important; }
 .mcard { background:var(--glass); border:var(--glass-border); border-radius:22px;
   box-shadow:var(--glass-shadow); backdrop-filter:blur(20px) saturate(140%);
@@ -452,6 +434,52 @@ section[data-testid="stFileUploaderDropzone"] {
     unsafe_allow_html=True,
 )
 
+st.markdown(
+    """
+<style>
+/* TOP BAR RESET - must be last */
+.st-key-top_bar, .st-key-top_bar *,
+.st-key-top_bar [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-top_bar [data-testid="stVerticalBlockBorderWrapper"] > div,
+.st-key-top_bar [data-testid="stVerticalBlock"],
+.st-key-top_bar [data-testid="stHorizontalBlock"],
+.st-key-top_bar [data-testid="stLayoutWrapper"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  position: relative !important;
+}
+.st-key-top_bar [data-testid="stVerticalBlockBorderWrapper"] { padding: 0 !important; }
+
+/* Back button - content width only, not column width */
+.st-key-top_bar .stButton { width: fit-content !important; }
+.st-key-top_bar .stButton > button {
+  width: auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 7px 16px !important;
+  font-size: 14px !important;
+  border-radius: 980px !important;
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  color: #D8D8DC !important;
+  box-shadow: none !important;
+}
+.st-key-top_bar .stButton > button:hover {
+  background: rgba(212,175,55,0.10) !important;
+  border-color: rgba(212,175,55,0.35) !important;
+  color: #FFFFFF !important;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 page = st.session_state.page
 
 # ================= HOME =================
@@ -491,7 +519,7 @@ if page == "home":
 
 # ================= EXPLORE =================
 elif page == "explore":
-    render_back(("← Home", "home"))
+    render_top_bar([("← Home", "home")])
 
     q = st.text_input("Search", placeholder="Search a road, river, town, or county")
     pf = st.session_state.risk_filter
@@ -633,7 +661,7 @@ elif page == "explore":
 
 # ================= PLANNING & BUDGET =================
 elif page == "plan":
-    render_back(("← Home", "home"), ("← Explore Bridges", "explore"))
+    render_top_bar([("← Home", "home"), ("← Explore Bridges", "explore")])
     st.markdown("## Planning & Budget")
     with st.container(border=True):
         budget = st.slider("Annual budget", 10, 100, 50, 5, format="$%dM", key="plan_budget")
@@ -661,7 +689,7 @@ elif page == "plan":
 
 # ================= ENGINEER =================
 elif page == "engineer":
-    render_back(("← Home", "home"), ("← Explore Bridges", "explore"))
+    render_top_bar([("← Home", "home"), ("← Explore Bridges", "explore")])
     st.markdown("## Engineer Check")
     st.markdown('<div class="caption">myBridge suggests. You confirm.</div>', unsafe_allow_html=True)
 
@@ -738,7 +766,7 @@ elif page == "engineer":
 
 # ================= GUIDE =================
 elif page == "guide":
-    render_back(("← Home", "home"))
+    render_top_bar([("← Home", "home")])
     st.markdown("## How to use myBridge")
     steps = [
         ("1", "Find", "Search any road, town, river, or county."),
