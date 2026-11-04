@@ -2,7 +2,7 @@
 
 **Every bridge. Know when it needs you.**
 
-myBridge helps bridge owners find which bridges are likely to need major repair within the next 5 years, early enough to plan a rehabilitation instead of being forced into an urgent, expensive replacement.
+myBridge helps bridge owners find which bridges are likely to need major repair within the next 5 years, early enough to plan a rehabilitation instead of being forced into an urgent, expensive replacement. Licensed Engineer in-the-loop verify the suggestions by submitting appropriate documents.
 ---
 
 ## The problem
