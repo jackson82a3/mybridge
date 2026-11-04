@@ -579,19 +579,28 @@ def _run_ask():
             q, df, client_factory=factory, model=LLAMA_MODEL)
 
 
-def render_bridge_list(items, mode):
-    with st.container(key="bridge_list"):
+def render_bridge_list(items, prefix):
+    seen = set()
+    unique_items = []
+    for it in items:
+        sid = it["sid"]
+        if sid in seen:
+            continue
+        seen.add(sid)
+        unique_items.append(it)
+    items = unique_items
+    with st.container(key=f"bridge_list_{prefix}"):
         for idx, it in enumerate(items):
             if idx:
                 st.markdown(
                     '<div style="border-top:1px solid rgba(255,255,255,0.06);"></div>',
                     unsafe_allow_html=True,
                 )
-            if mode == "open":
-                st.button(f"{it['line1']}\n{it['line2']}", key=f"open_{it['sid']}",
+            if prefix == "open":
+                st.button(f"{it['line1']}\n{it['line2']}", key=f"{prefix}_{it['sid']}_{idx}",
                           width="stretch", on_click=open_bridge, args=(it["sid"],))
             else:
-                st.button(f"{it['line1']} \u203a\n{it['line2']}", key=f"expand_{it['sid']}",
+                st.button(f"{it['line1']} \u203a\n{it['line2']}", key=f"{prefix}_{it['sid']}_{idx}",
                           width="stretch", on_click=_toggle_hr, args=(it["sid"],))
                 if st.session_state.expanded_bridge == it["sid"]:
                     tr, est = it["row"], it["est"]
@@ -604,9 +613,9 @@ def render_bridge_list(items, mode):
                         f"in {est['target_year']}"
                     )
                     v1, v2 = st.columns(2, gap="medium")
-                    v1.button("View bridge", key=f"list_view_{it['sid']}", width="stretch",
+                    v1.button("View bridge", key=f"{prefix}_view_{it['sid']}_{idx}", width="stretch",
                               on_click=_ask_view, args=(it["sid"],))
-                    v2.button("Send to Engineer-in-the-Loop", key=f"list_send_{it['sid']}",
+                    v2.button("Send to Engineer-in-the-Loop", key=f"{prefix}_send_{it['sid']}_{idx}",
                               width="stretch", on_click=send_for_check,
                               args=(it["sid"], "High Risk"))
                     with st.expander("How this estimate is built"):
